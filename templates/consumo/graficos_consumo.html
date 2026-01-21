@@ -1,0 +1,290 @@
+{% extends 'consumo/base.html' %}
+
+{% block title %}Gráficos de Consumo - Sistema de Controle de Água{% endblock %}
+
+{% block content %}
+<div class="graficos-page">
+    <h2>Gráficos de Consumo de Água</h2>
+    
+    <div class="filters">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="filtro_hidrometro">Hidrômetro</label>
+                <select id="filtro_hidrometro" class="form-control">
+                    <option value="">Todos</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="filtro_dias">Período</label>
+                <select id="filtro_dias" class="form-control">
+                    <option value="">Todos os dias</option>
+                    <option value="1" selected>Hoje</option>
+                    <option value="7">Últimos 7 dias</option>
+                    <option value="15">Últimos 15 dias</option>
+                    <option value="30">Últimos 30 dias</option>
+                    <option value="60">Últimos 60 dias</option>
+                    <option value="90">Últimos 90 dias</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <button id="btnAtualizar" class="btn btn-primary">🔄 Atualizar</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="charts-grid">
+        <div class="chart-container">
+            <h3>Consumo Diário (Litros)</h3>
+            <canvas id="consumoDiarioChart"></canvas>
+        </div>
+        
+        <div class="chart-container">
+            <h3>Consumo Acumulado (Litros)</h3>
+            <canvas id="consumoAcumuladoChart"></canvas>
+        </div>
+        
+        <div class="chart-container">
+            <h3>Consumo por Período</h3>
+            <canvas id="consumoPeriodoChart"></canvas>
+        </div>
+        
+        <div class="chart-container">
+            <h3>Top 10 Maiores Consumos (Litros)</h3>
+            <canvas id="topConsumosChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+let charts = {};
+
+// Carregar lista de hidrômetros
+async function carregarHidrometros() {
+    try {
+        const response = await fetch('/api/hidrometros/?ativo=true');
+        const data = await response.json();
+        
+        const select = document.getElementById('filtro_hidrometro');
+        data.results.forEach(h => {
+            const option = document.createElement('option');
+            option.value = h.id;
+            option.textContent = `${h.numero} - Lote ${h.lote_numero}`;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Erro ao carregar hidrômetros:', error);
+    }
+}
+
+// Carregar dados e gerar gráficos
+async function carregarGraficos() {
+    const hidrometroId = document.getElementById('filtro_hidrometro').value;
+    const dias = document.getElementById('filtro_dias').value;
+    
+    try {
+        // Buscar todas as leituras sem filtro de data
+        let url = `/api/leituras/`;
+        if (hidrometroId) {
+            url += `?hidrometro=${hidrometroId}`;
+        }
+        
+        console.log('Buscando leituras em:', url);
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        let leituras = data.results || [];
+        
+        console.log('Total de leituras:', leituras.length);
+        console.log('Leituras:', leituras);
+        
+        // Processar dados
+        const consumoPorDia = {};
+        const consumoPorPeriodo = { manha: 0, tarde: 0 };
+        const consumoPorHidrometro = {};
+        
+        leituras.forEach(leitura => {
+            const dataLeitura = new Date(leitura.data_leitura);
+            const dataStr = dataLeitura.toLocaleDateString('pt-BR');
+            const consumo = parseFloat(leitura.consumo_desde_ultima_litros || 0);
+            
+            console.log(`Data: ${dataStr}, Consumo: ${consumo}L`);
+            
+            if (!consumoPorDia[dataStr]) consumoPorDia[dataStr] = 0;
+            consumoPorDia[dataStr] += consumo;
+            
+            consumoPorPeriodo[leitura.periodo] += consumo;
+            
+            const key = `${leitura.hidrometro_numero} - Lote ${leitura.lote_numero}`;
+            if (!consumoPorHidrometro[key]) consumoPorHidrometro[key] = 0;
+            consumoPorHidrometro[key] += consumo;
+        });
+        
+        // Gráfico de Consumo Diário
+        criarGraficoLinha('consumoDiarioChart', 
+            Object.keys(consumoPorDia), 
+            Object.values(consumoPorDia),
+            'Consumo Diário (Litros)'
+        );
+        
+        // Gráfico de Consumo Acumulado
+        const valoresAcumulados = [];
+        let acumulado = 0;
+        Object.values(consumoPorDia).forEach(valor => {
+            acumulado += valor;
+            valoresAcumulados.push(acumulado);
+        });
+        criarGraficoLinha('consumoAcumuladoChart', 
+            Object.keys(consumoPorDia), 
+            valoresAcumulados,
+            'Consumo Acumulado (Litros)',
+            'rgba(75, 192, 192, 0.6)'
+        );
+        
+        // Gráfico de Consumo por Período
+        criarGraficoPizza('consumoPeriodoChart',
+            ['Manhã', 'Tarde'],
+            [consumoPorPeriodo.manha, consumoPorPeriodo.tarde]
+        );
+        
+        // Top 10 Maiores Consumos
+        const topConsumos = Object.entries(consumoPorHidrometro)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10);
+        criarGraficoBarra('topConsumosChart',
+            topConsumos.map(c => c[0]),
+            topConsumos.map(c => c[1])
+        );
+        
+    } catch (error) {
+        console.error('Erro ao carregar gráficos:', error);
+    }
+}
+
+function criarGraficoLinha(canvasId, labels, data, label, cor = 'rgba(54, 162, 235, 0.6)') {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    
+    if (charts[canvasId]) {
+        charts[canvasId].destroy();
+    }
+    
+    charts[canvasId] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: label,
+                data: data,
+                borderColor: cor,
+                backgroundColor: cor,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    display: true
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+function criarGraficoBarra(canvasId, labels, data) {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    
+    if (charts[canvasId]) {
+        charts[canvasId].destroy();
+    }
+    
+    charts[canvasId] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Consumo (m³)',
+                data: data,
+                backgroundColor: 'rgba(255, 99, 132, 0.6)'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            indexAxis: 'y',
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+function criarGraficoPizza(canvasId, labels, data) {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    
+    if (charts[canvasId]) {
+        charts[canvasId].destroy();
+    }
+    
+    charts[canvasId] = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: [
+                    'rgba(255, 206, 86, 0.6)',
+                    'rgba(75, 192, 192, 0.6)'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    position: 'top'
+                }
+            }
+        }
+    });
+}
+
+// Inicializar
+document.addEventListener('DOMContentLoaded', function() {
+    carregarHidrometros();
+    carregarGraficos();
+    
+    // Event listeners para filtros
+    const btnAtualizar = document.getElementById('btnAtualizar');
+    const filtroHidrometro = document.getElementById('filtro_hidrometro');
+    const filtroDias = document.getElementById('filtro_dias');
+    
+    if (btnAtualizar) {
+        btnAtualizar.addEventListener('click', carregarGraficos);
+    }
+    
+    if (filtroHidrometro) {
+        filtroHidrometro.addEventListener('change', carregarGraficos);
+    }
+    
+    if (filtroDias) {
+        filtroDias.addEventListener('change', carregarGraficos);
+    }
+});
+</script>
+{% endblock %}

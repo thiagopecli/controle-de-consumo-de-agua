@@ -1,0 +1,110 @@
+{% extends 'consumo/base.html' %}
+
+{% block title %}Hidrômetros - Sistema de Controle de Água{% endblock %}
+
+{% block content %}
+<div class="hidrometros-page">
+    <h2>Lista de Hidrômetros</h2>
+    
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Buscar por número do lote..." class="search-input">
+    </div>
+    
+    <div class="table-container">
+        <table class="data-table" id="hidrometrosTable">
+            <thead>
+                <tr>
+                    <th>Número</th>
+                    <th>Lote</th>
+                    <th>Tipo</th>
+                    <th>Localização</th>
+                    <th>Data Instalação</th>
+                    <th>Status</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for hidrometro in hidrometros %}
+                <tr>
+                    <td><strong>{{ hidrometro.numero }}</strong></td>
+                    <td>{{ hidrometro.lote.numero }}{% if hidrometro.lote.tipo == 'administracao' %} (ADM){% endif %}</td>
+                    <td>
+                        <span class="badge badge-{{ hidrometro.lote.tipo }}">
+                            {{ hidrometro.lote.get_tipo_display }}
+                        </span>
+                    </td>
+                    <td>{{ hidrometro.localizacao|default:"N/A" }}</td>
+                    <td>{{ hidrometro.data_instalacao|date:"d/m/Y" }}</td>
+                    <td>
+                        {% if hidrometro.ativo %}
+                        <span class="badge badge-success">Ativo</span>
+                        {% else %}
+                        <span class="badge badge-danger">Inativo</span>
+                        {% endif %}
+                    </td>
+                    <td class="coluna-acoes">
+                        <div class="btn-group-vertical">
+                            <a href="{% url 'consumo:detalhes_hidrometro' hidrometro.id %}" class="btn btn-sm btn-success">
+                                📊 Detalhes
+                            </a>
+                            <a href="{% url 'consumo:registrar_leitura' %}?hidrometro={{ hidrometro.id }}" class="btn btn-sm btn-primary">
+                                📝 Nova Leitura
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center">Nenhum hidrômetro cadastrado</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchInput');
+    const table = document.getElementById('hidrometrosTable');
+    
+    if (searchInput && table) {
+        searchInput.addEventListener('keyup', function() {
+            const searchValue = this.value.trim();
+            const tbody = table.getElementsByTagName('tbody')[0];
+            if (!tbody) return;
+            
+            const rows = tbody.getElementsByTagName('tr');
+            
+            // Se digitar "adm" (case insensitive), mostra apenas lotes ADM
+            const buscaAdm = searchValue.toLowerCase() === 'adm';
+            
+            for (let row of rows) {
+                const cells = row.getElementsByTagName('td');
+                // Coluna 1 (índice 1) é o Lote
+                if (cells.length > 1) {
+                    const loteTextOriginal = cells[1].textContent.trim();
+                    const isAdm = loteTextOriginal.includes('(ADM)');
+                    
+                    // Se o campo está vazio, mostra todos
+                    if (searchValue === '') {
+                        row.style.display = '';
+                    } 
+                    // Se busca por "adm", mostra apenas lotes ADM
+                    else if (buscaAdm) {
+                        row.style.display = isAdm ? '' : 'none';
+                    }
+                    // Caso contrário, busca por número exato do lote
+                    else {
+                        let loteNumero = loteTextOriginal.replace(/\s*\(ADM\)\s*/gi, '').trim();
+                        row.style.display = loteNumero === searchValue ? '' : 'none';
+                    }
+                } else {
+                    row.style.display = '';
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

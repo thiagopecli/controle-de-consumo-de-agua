@@ -1,0 +1,62 @@
+{% extends 'consumo/base.html' %}
+
+{% block title %}Dashboard - Sistema de Controle de Água{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <h2>Dashboard</h2>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon">🏠</div>
+            <div class="stat-info">
+                <h3>Total de Hidrômetros</h3>
+                <p class="stat-value">{{ total_lotes }}</p>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon">🔧</div>
+            <div class="stat-info">
+                <h3>Hidrômetros Ativos</h3>
+                <p class="stat-value">{{ total_hidrometros }}</p>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon">📊</div>
+            <div class="stat-info">
+                <h3>Leituras Hoje</h3>
+                <p class="stat-value">{{ leituras_hoje }}</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="quick-actions">
+        <h3>Ações Rápidas</h3>
+        <div class="action-buttons">
+            <a href="{% url 'consumo:registrar_leitura' %}" class="btn btn-primary">
+                📝 Registrar Leitura
+            </a>
+            <a href="{% url 'consumo:graficos_consumo' %}" class="btn btn-secondary">
+                📈 Ver Gráficos
+            </a>
+            <a href="{% url 'consumo:listar_hidrometros' %}" class="btn btn-secondary">
+                🔍 Ver Hidrômetros
+            </a>
+            <a href="/admin/" class="btn btn-secondary">
+                ⚙️ Painel Admin
+            </a>
+        </div>
+    </div>
+    
+    <div class="recent-activity">
+        <h3>Informações do Sistema</h3>
+        <div class="info-box">
+            <p><strong>Lotes Residenciais:</strong> 310</p>
+            <p><strong>Hidrômetros de Uso do Condomínio:</strong> 10</p>
+            <p><strong>Frequência de Leituras:</strong> 2 vezes ao dia (Manhã e Tarde)</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

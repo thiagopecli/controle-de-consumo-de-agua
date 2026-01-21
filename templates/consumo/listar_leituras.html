@@ -1,0 +1,129 @@
+{% extends 'consumo/base.html' %}
+
+{% block title %}Leituras - Sistema de Controle de Água{% endblock %}
+
+{% block content %}
+<div class="leituras-page">
+    <h2>Histórico de Leituras</h2>
+    
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Buscar por número do lote..." class="search-input">
+    </div>
+    
+    <div class="table-container">
+        <table class="data-table" id="leiturasTable">
+            <thead>
+                <tr>
+                    <th>Data/Hora</th>
+                    <th>Hidrômetro</th>
+                    <th>Lote</th>
+                    <th>Tipo</th>
+                    <th>Leitura (m³)</th>
+                    <th>Consumo (Litros)</th>
+                    <th>Período</th>
+                    <th>Responsável</th>
+                    <th>Foto</th>
+                    <th>Observações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for leitura in leituras %}
+                <tr>
+                    <td><strong>{{ leitura.data_leitura|date:"d/m/Y H:i" }}</strong></td>
+                    <td>{{ leitura.hidrometro.numero }}</td>
+                    <td>{{ leitura.hidrometro.lote.numero }}{% if leitura.hidrometro.lote.tipo == 'administracao' %} (ADM){% endif %}</td>
+                    <td>
+                        <span class="badge badge-{{ leitura.hidrometro.lote.tipo }}">
+                            {{ leitura.hidrometro.lote.get_tipo_display }}
+                        </span>
+                    </td>
+                    <td><strong>{{ leitura.leitura }}</strong></td>
+                    <td>
+                        {% if leitura.consumo_desde_ultima_leitura_litros > 0 %}
+                        <span style="color: #0891b2; font-weight: 700;">
+                            {{ leitura.consumo_desde_ultima_leitura_litros|floatformat:0 }} L
+                        </span>
+                        {% else %}
+                        <span style="color: #94a3b8;">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if leitura.periodo == 'manha' %}
+                        <span class="badge badge-info">🌅 Manhã</span>
+                        {% else %}
+                        <span class="badge badge-warning">🌆 Tarde</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ leitura.responsavel|default:"N/A" }}</td>
+                    <td>
+                        {% if leitura.foto %}
+                        <a href="{{ leitura.foto.url }}" target="_blank" class="btn btn-sm btn-info">
+                            📷 Ver Foto
+                        </a>
+                        {% else %}
+                        <span style="color: #94a3b8;">Sem foto</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ leitura.observacoes|default:"—"|truncatewords:5 }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10" class="text-center">Nenhuma leitura cadastrada</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="info-box" style="margin-top: 2rem;">
+        <h3>ℹ️ Informações</h3>
+        <p><strong>Total de Leituras:</strong> {{ leituras.count }}</p>
+        <p>As leituras são ordenadas da mais recente para a mais antiga.</p>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchInput');
+    const table = document.getElementById('leiturasTable');
+    
+    if (searchInput && table) {
+        searchInput.addEventListener('keyup', function() {
+            const searchValue = this.value.trim();
+            const tbody = table.getElementsByTagName('tbody')[0];
+            if (!tbody) return;
+            
+            const rows = tbody.getElementsByTagName('tr');
+            
+            // Se digitar "adm" (case insensitive), mostra apenas lotes ADM
+            const buscaAdm = searchValue.toLowerCase() === 'adm';
+            
+            for (let row of rows) {
+                const cells = row.getElementsByTagName('td');
+                // Coluna 2 (índice 2) é o Lote
+                if (cells.length > 2) {
+                    const loteTextOriginal = cells[2].textContent.trim();
+                    const isAdm = loteTextOriginal.includes('(ADM)');
+                    
+                    // Se o campo está vazio, mostra todos
+                    if (searchValue === '') {
+                        row.style.display = '';
+                    } 
+                    // Se busca por "adm", mostra apenas lotes ADM
+                    else if (buscaAdm) {
+                        row.style.display = isAdm ? '' : 'none';
+                    }
+                    // Caso contrário, busca por número exato do lote
+                    else {
+                        let loteNumero = loteTextOriginal.replace(/\s*\(ADM\)\s*/gi, '').trim();
+                        row.style.display = loteNumero === searchValue ? '' : 'none';
+                    }
+                } else {
+                    row.style.display = '';
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

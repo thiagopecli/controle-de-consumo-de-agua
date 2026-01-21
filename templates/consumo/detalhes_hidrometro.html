@@ -1,0 +1,167 @@
+{% extends 'consumo/base.html' %}
+
+{% block title %}Hidrômetro {{ hidrometro.numero }} - Sistema de Controle de Água{% endblock %}
+
+{% block content %}
+<div class="detalhes-hidrometro-page">
+    <h2>📊 Informações do Hidrômetro {{ hidrometro.numero }}</h2>
+    
+    <div class="info-box" style="margin-bottom: 2rem;">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">🔧</div>
+                <div class="stat-info">
+                    <h3>Hidrômetro</h3>
+                    <p class="stat-value" style="font-size: 1.3rem;">{{ hidrometro.numero }}</p>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">🏠</div>
+                <div class="stat-info">
+                    <h3>Lote</h3>
+                    <p class="stat-value" style="font-size: 1.3rem;">{{ hidrometro.lote.numero }}</p>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">
+                    {% if hidrometro.lote.tipo == 'residencial' %}🏡{% else %}🏢{% endif %}
+                </div>
+                <div class="stat-info">
+                    <h3>Tipo</h3>
+                    <p class="stat-value" style="font-size: 1rem;">
+                        <span class="badge badge-{{ hidrometro.lote.tipo }}" style="font-size: 0.9rem;">
+                            {{ hidrometro.lote.get_tipo_display }}
+                        </span>
+                    </p>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">📅</div>
+                <div class="stat-info">
+                    <h3>Instalação</h3>
+                    <p class="stat-value" style="font-size: 1.1rem;">{{ hidrometro.data_instalacao|date:"d/m/Y" }}</p>
+                </div>
+            </div>
+        </div>
+        
+        {% if hidrometro.localizacao %}
+        <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 2px solid var(--border-color);">
+            <p><strong>📍 Localização:</strong> {{ hidrometro.localizacao }}</p>
+        </div>
+        {% endif %}
+        
+        {% if hidrometro.observacoes %}
+        <div style="margin-top: 1rem;">
+            <p><strong>📝 Observações:</strong> {{ hidrometro.observacoes }}</p>
+        </div>
+        {% endif %}
+    </div>
+    
+    <div style="margin-bottom: 2rem;">
+        <a href="{% url 'consumo:registrar_leitura' %}?hidrometro={{ hidrometro.id }}" class="btn btn-primary">
+            📝 Registrar Nova Leitura
+        </a>
+        <a href="{% url 'consumo:listar_hidrometros' %}" class="btn btn-secondary">
+            ← Voltar para Lista
+        </a>
+    </div>
+    
+    <h3 style="margin-bottom: 1.5rem; color: var(--dark-text);">📋 Histórico de Leituras ({{ leituras.count }})</h3>
+    
+    {% if leituras %}
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Data/Hora</th>
+                    <th>Leitura (m³)</th>
+                    <th>Consumo (Litros)</th>
+                    <th>Período</th>
+                    <th>Responsável</th>
+                    <th>Foto</th>
+                    <th>Observações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for leitura in leituras %}
+                <tr>
+                    <td><strong>{{ leitura.data_leitura|date:"d/m/Y H:i" }}</strong></td>
+                    <td><strong>{{ leitura.leitura }}</strong></td>
+                    <td>
+                        {% if leitura.consumo_desde_ultima_leitura_litros > 0 %}
+                        <span style="color: #0891b2; font-weight: 700;">
+                            {{ leitura.consumo_desde_ultima_leitura_litros|floatformat:0 }} L
+                        </span>
+                        {% else %}
+                        <span style="color: #94a3b8;">Primeira leitura</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if leitura.periodo == 'manha' %}
+                        <span class="badge badge-info">🌅 Manhã</span>
+                        {% else %}
+                        <span class="badge badge-warning">🌆 Tarde</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ leitura.responsavel|default:"N/A" }}</td>
+                    <td>
+                        {% if leitura.foto %}
+                        <a href="{{ leitura.foto.url }}" target="_blank" class="btn btn-sm btn-info">
+                            📷 Ver Foto
+                        </a>
+                        {% else %}
+                        <span style="color: #94a3b8;">Sem foto</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ leitura.observacoes|default:"—"|truncatewords:8 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Galeria de Fotos -->
+    <div style="margin-top: 3rem;">
+        <h3 style="margin-bottom: 1.5rem; color: var(--dark-text);">📸 Galeria de Fotos</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.5rem;">
+            {% for leitura in leituras %}
+                {% if leitura.foto %}
+                <div class="chart-container" style="padding: 1rem;">
+                    <p style="margin-bottom: 0.8rem; font-weight: 600; color: var(--dark-text);">
+                        {{ leitura.data_leitura|date:"d/m/Y H:i" }} - {{ leitura.leitura }} m³
+                    </p>
+                    <a href="{{ leitura.foto.url }}" target="_blank">
+                        <img src="{{ leitura.foto.url }}" alt="Leitura {{ leitura.data_leitura|date:'d/m/Y' }}" 
+                             style="width: 100%; height: 200px; object-fit: cover; border-radius: 10px; cursor: pointer; transition: transform 0.3s ease;"
+                             onmouseover="this.style.transform='scale(1.05)'"
+                             onmouseout="this.style.transform='scale(1)'">
+                    </a>
+                    <p style="margin-top: 0.5rem; font-size: 0.875rem; color: var(--secondary-color);">
+                        {% if leitura.periodo == 'manha' %}🌅 Manhã{% else %}🌆 Tarde{% endif %}
+                        {% if leitura.consumo_desde_ultima_leitura_litros > 0 %}
+                        | <span style="color: #0891b2; font-weight: 600;">{{ leitura.consumo_desde_ultima_leitura_litros|floatformat:0 }} L</span>
+                        {% endif %}
+                    </p>
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    
+    {% else %}
+    <div class="info-box">
+        <p style="text-align: center; color: var(--secondary-color); padding: 2rem;">
+            📭 Nenhuma leitura registrada ainda para este hidrômetro.
+        </p>
+        <p style="text-align: center;">
+            <a href="{% url 'consumo:registrar_leitura' %}?hidrometro={{ hidrometro.id }}" class="btn btn-primary">
+                📝 Registrar Primeira Leitura
+            </a>
+        </p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

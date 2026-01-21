@@ -1,0 +1,210 @@
+{% extends 'consumo/base.html' %}
+
+{% block title %}Registrar Leitura - Sistema de Controle de Água{% endblock %}
+
+{% block content %}
+<div class="registrar-leitura-page">
+    <h2>Registrar Leitura de Hidrômetro</h2>
+    
+    <div class="form-container">
+        <form id="leituraForm">
+            <div class="form-group">
+                <label for="hidrometro">Hidrômetro *</label>
+                <select id="hidrometro" name="hidrometro" class="form-control" required>
+                    <option value="">Selecione um hidrômetro</option>
+                    {% for hidrometro in hidrometros %}
+                    <option value="{{ hidrometro.id }}" data-lote="{{ hidrometro.lote.numero }}">
+                        {{ hidrometro.numero }} - Lote {{ hidrometro.lote.numero }}{% if hidrometro.lote.tipo == 'administracao' %} (ADM){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="leitura">Leitura (m³) *</label>
+                    <input type="text" id="leitura" name="leitura" class="form-control" 
+                           required placeholder="0,000" maxlength="9">
+                </div>
+                
+                <div class="form-group">
+                    <label for="periodo">Período *</label>
+                    <select id="periodo" name="periodo" class="form-control" required>
+                        <option value="">Selecione</option>
+                        <option value="manha">Manhã</option>
+                        <option value="tarde">Tarde</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="data_leitura">Data e Hora *</label>
+                    <input type="datetime-local" id="data_leitura" name="data_leitura" 
+                           class="form-control" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="responsavel">Responsável</label>
+                    <input type="text" id="responsavel" name="responsavel" 
+                           class="form-control" placeholder="Nome do responsável">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="observacoes">Observações</label>
+                <textarea id="observacoes" name="observacoes" class="form-control" 
+                          rows="3" placeholder="Observações adicionais (opcional)"></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="foto">Foto da Leitura</label>
+                <input type="file" id="foto" name="foto" class="form-control" accept="image/*">
+            </div>
+            
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    💾 Salvar Leitura
+                </button>
+                <button type="reset" class="btn btn-secondary btn-lg">
+                    🔄 Limpar
+                </button>
+            </div>
+        </form>
+        
+        <div id="mensagem" class="alert" style="display: none;"></div>
+    </div>
+    
+    <div class="info-box">
+        <h3>ℹ️ Informações</h3>
+        <ul>
+            <li>Preencha todos os campos obrigatórios marcados com *</li>
+            <li>A leitura deve ser em metros cúbicos (m³)</li>
+            <li>Selecione o período correto: Manhã ou Tarde</li>
+            <li>A foto é opcional mas recomendada para registro</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+// Definir data e hora atual ao carregar a página
+document.addEventListener('DOMContentLoaded', function() {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    document.getElementById('data_leitura').value = now.toISOString().slice(0, 16);
+    
+    // Formatar campo de leitura com vírgula
+    const leituraInput = document.getElementById('leitura');
+    
+    leituraInput.addEventListener('input', function(e) {
+        let valor = this.value;
+        
+        // Remove tudo exceto números e vírgula
+        valor = valor.replace(/[^\d,]/g, '');
+        
+        // Permite apenas uma vírgula
+        const partes = valor.split(',');
+        if (partes.length > 2) {
+            valor = partes[0] + ',' + partes.slice(1).join('');
+        }
+        
+        // Limita a 5 dígitos antes da vírgula
+        if (partes[0] && partes[0].length > 5) {
+            partes[0] = partes[0].substring(0, 5);
+            valor = partes.join(',');
+        }
+        
+        // Limita a 3 dígitos após a vírgula
+        if (partes[1] && partes[1].length > 3) {
+            partes[1] = partes[1].substring(0, 3);
+            valor = partes.join(',');
+        }
+        
+        this.value = valor;
+        
+        // Valida se o valor não excede 99999
+        const valorNumerico = parseFloat(valor.replace(',', '.'));
+        if (valorNumerico > 99999) {
+            this.value = '99999';
+            alert('⚠️ O valor máximo permitido é 99999 m³');
+        }
+    });
+    
+    // Adiciona vírgula automaticamente se só digitar números inteiros
+    leituraInput.addEventListener('blur', function() {
+        if (this.value && !this.value.includes(',')) {
+            this.value = this.value + ',000';
+        }
+    });
+});
+
+// Submeter formulário
+document.getElementById('leituraForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    // Pegar e converter valor da leitura (vírgula para ponto)
+    let leituraValor = document.getElementById('leitura').value.replace(',', '.');
+    const leituraNum = parseFloat(leituraValor);
+    
+    // Validar leitura antes de enviar
+    if (isNaN(leituraNum) || leituraNum < 0) {
+        alert('❌ Erro: Informe um valor válido para a leitura');
+        return;
+    }
+    
+    if (leituraNum > 99999) {
+        alert('❌ Erro: O valor da leitura não pode ser maior que 99999 m³');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('hidrometro', document.getElementById('hidrometro').value);
+    formData.append('leitura', leituraValor);  // Envia com ponto decimal
+    formData.append('data_leitura', document.getElementById('data_leitura').value);
+    formData.append('periodo', document.getElementById('periodo').value);
+    formData.append('responsavel', document.getElementById('responsavel').value);
+    formData.append('observacoes', document.getElementById('observacoes').value);
+    
+    const foto = document.getElementById('foto').files[0];
+    if (foto) {
+        formData.append('foto', foto);
+    }
+    
+    try {
+        const response = await fetch('/api/leituras/', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        const mensagemDiv = document.getElementById('mensagem');
+        
+        if (response.ok) {
+            mensagemDiv.className = 'alert alert-success';
+            mensagemDiv.textContent = '✅ Leitura registrada com sucesso!';
+            mensagemDiv.style.display = 'block';
+            document.getElementById('leituraForm').reset();
+            
+            // Redefinir data/hora atual
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('data_leitura').value = now.toISOString().slice(0, 16);
+        } else {
+            mensagemDiv.className = 'alert alert-error';
+            mensagemDiv.textContent = '❌ Erro ao registrar leitura: ' + JSON.stringify(data);
+            mensagemDiv.style.display = 'block';
+        }
+        
+        setTimeout(() => {
+            mensagemDiv.style.display = 'none';
+        }, 5000);
+        
+    } catch (error) {
+        const mensagemDiv = document.getElementById('mensagem');
+        mensagemDiv.className = 'alert alert-error';
+        mensagemDiv.textContent = '❌ Erro ao conectar com o servidor: ' + error.message;
+        mensagemDiv.style.display = 'block';
+    }
+});
+</script>
+{% endblock %}
