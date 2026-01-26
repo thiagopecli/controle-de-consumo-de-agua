@@ -44,7 +44,7 @@
                     </td>
                     <td class="coluna-acoes">
                         <div class="btn-group-vertical">
-                            <a href="{% url 'consumo:detalhes_hidrometro' hidrometro.id %}" class="btn btn-sm btn-success">
+                            <a href="{% url 'consumo:graficos_lote' hidrometro.lote.id %}" class="btn btn-sm btn-success">
                                 📊 Detalhes
                             </a>
                             <a href="{% url 'consumo:registrar_leitura' %}?hidrometro={{ hidrometro.id }}" class="btn btn-sm btn-primary">

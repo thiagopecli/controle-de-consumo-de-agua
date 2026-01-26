@@ -2,31 +2,43 @@
 {% load static %}
 {% load filtros_personalizados %}
 
-{% block title %}Gráficos de Consumo - Sistema de Controle de Água{% endblock %}
+{% block title %}Gráficos - Lote {{ lote.numero }} - Sistema de Controle de Água{% endblock %}
 
 {% block content %}
-<div class="graficos-consumo-page">
+<div class="graficos-lote-page">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
         <div>
-            <h2>📊 Gráficos de Consumo do Condomínio</h2>
+            <h2>📊 Gráficos de Consumo - Lote {{ lote.numero }}</h2>
             <p style="color: var(--secondary-color); margin-top: 0.5rem;">
-                Visualização filtrada do consumo de hidrômetros ativos — {{ dados_graficos.periodo_label }}
+                Tipo: <span class="badge badge-{{ lote.tipo }}">{{ lote.get_tipo_display }}</span>
+                | Período: <strong>{{ dados_graficos.mes }}</strong>
             </p>
         </div>
         <div style="display: flex; gap: 1rem;">
-            <a href="{% url 'consumo:exportar_graficos_consumo_pdf' %}" class="btn btn-primary" style="background: #e74c3c;">
+            <a href="{% url 'consumo:exportar_graficos_lote_pdf' lote.id %}" class="btn btn-primary" style="background: #e74c3c;">
                 📄 Baixar PDF
             </a>
-            <a href="{% url 'consumo:exportar_graficos_consumo_excel' %}" class="btn btn-primary" style="background: #27ae60;">
+            <a href="{% url 'consumo:exportar_graficos_lote_excel' lote.id %}" class="btn btn-primary" style="background: #27ae60;">
                 📊 Baixar Excel
             </a>
-            <a href="{% url 'consumo:dashboard' %}" class="btn btn-secondary">
-                ← Voltar
+            <a href="{% url 'consumo:listar_hidrometros' %}" class="btn btn-secondary">
+                ← Voltar para Lista
             </a>
         </div>
     </div>
 
-    <!-- Cards de Resumo -->
+    {% if sem_dados %}
+    <div class="info-box" style="text-align: center; padding: 3rem;">
+        <p style="font-size: 1.2rem; color: var(--secondary-color); margin-bottom: 1rem;">
+            📭 Nenhum hidrômetro ativo encontrado para este lote.
+        </p>
+        <p>
+            <a href="{% url 'consumo:registrar_leitura' %}" class="btn btn-primary">
+                📝 Registrar Leitura
+            </a>
+        </p>
+    </div>
+    {% else %}
 
     <!-- Cards de Resumo -->
     <div class="stats-grid" style="margin-bottom: 3rem;">
@@ -66,14 +78,14 @@
     <!-- Container dos Gráficos -->
     <div class="charts-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(700px, 1fr)); gap: 2rem; margin-bottom: 3rem;">
         
-        <!-- Gráfico 1: Consumo por Dia do Mês -->
+        <!-- Gráfico 1: Consumo por Dia -->
         <div class="chart-container" style="padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: white;">
             <h3 style="color: var(--dark-text); margin-bottom: 1.5rem; font-size: 1.2rem;">
                 📅 Consumo por Dia do Mês (Litros)
             </h3>
             <canvas id="chartConsumoPorDia"></canvas>
             <p style="font-size: 0.85rem; color: var(--secondary-color); margin-top: 1rem; text-align: center;">
-                Exibindo o consumo total de todos os hidrômetros do condomínio por dia
+                Exibindo o consumo total de todos os hidrômetros do lote por dia
             </p>
         </div>
 
@@ -84,7 +96,7 @@
             </h3>
             <canvas id="chartConsumoMes"></canvas>
             <p style="font-size: 0.85rem; color: var(--secondary-color); margin-top: 1rem; text-align: center;">
-                Visualização do consumo agregado por mês dentro do período selecionado (Total: <strong>{{ dados_graficos.consumo_total_ano|floatformat:0|formatar_litros }} L</strong>)
+                Visualização mensal do consumo ao longo do ano (Total Acumulado: <strong>{{ dados_graficos.consumo_total_ano|floatformat:0|formatar_litros }} L</strong>)
             </p>
         </div>
     </div>
@@ -98,21 +110,72 @@
             <canvas id="chartConsumoPeriodo"></canvas>
         </div>
         <p style="font-size: 0.85rem; color: var(--secondary-color); margin-top: 1rem; text-align: center;">
-            Comparação entre o consumo matutino e vespertino do condomínio inteiro
+            Comparação entre o consumo matutino e vespertino
         </p>
     </div>
 
-    <!-- Gráfico 4: Top 10 lotes do ano -->
-    <div class="chart-container" style="padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: white; margin-bottom: 3rem;">
-        <h3 style="color: var(--dark-text); margin-bottom: 1.5rem; font-size: 1.2rem;">
-            🏆 Top 10 Lotes por Consumo (Ano)
-        </h3>
-        <canvas id="chartTopLotes"></canvas>
-        <p style="font-size: 0.85rem; color: var(--secondary-color); margin-top: 1rem; text-align: center;">
-            Ranking dos 10 lotes com maior consumo no ano corrente (soma de todos os hidrômetros ativos)
-        </p>
+    <!-- Tabela de Dados Detalhados -->
+    <div style="margin-bottom: 3rem;">
+        <h3 style="color: var(--dark-text); margin-bottom: 1.5rem;">📋 Detalhes do Consumo</h3>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
+            <!-- Tabela de Hidrômetros -->
+            <div>
+                <h4 style="color: var(--dark-text); margin-bottom: 1rem; font-size: 1rem;">
+                    💧 Hidrômetros do Lote
+                </h4>
+                <div class="table-container">
+                    <table class="data-table" style="font-size: 0.95rem;">
+                        <thead>
+                            <tr>
+                                <th>Número</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for hidrometro in hidrometros %}
+                            <tr>
+                                <td><strong>{{ hidrometro.numero }}</strong></td>
+                                <td>
+                                    <a href="{% url 'consumo:detalhes_hidrometro' hidrometro.id %}" class="btn btn-sm btn-info">
+                                        Ver Detalhes
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Resumo de Consumo por Período -->
+            <div>
+                <h4 style="color: var(--dark-text); margin-bottom: 1rem; font-size: 1rem;">
+                    📊 Resumo por Período
+                </h4>
+                <div class="info-box">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 2px solid var(--border-color);">
+                        <div style="flex: 1;">
+                            <p style="color: var(--secondary-color); margin: 0 0 0.5rem 0;">🌅 Período Matutino</p>
+                            <p style="font-size: 1.3rem; font-weight: 700; margin: 0; color: #0891b2;">
+                                {{ dados_graficos.consumo_periodo.manha|floatformat:0|formatar_litros }} L
+                            </p>
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="flex: 1;">
+                            <p style="color: var(--secondary-color); margin: 0 0 0.5rem 0;">🌆 Período Vespertino</p>
+                            <p style="font-size: 1.3rem; font-weight: 700; margin: 0; color: #ea580c;">
+                                {{ dados_graficos.consumo_periodo.tarde|floatformat:0|formatar_litros }} L
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
+    {% endif %}
 </div>
 
 <!-- Script Chart.js -->
@@ -135,7 +198,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // ============ GRÁFICO 1: CONSUMO POR DIA DO MÊS ============
     const ctxDia = document.getElementById('chartConsumoPorDia');
     if (ctxDia && dadosGraficos.consumo_por_dia.length > 0) {
-        const diasLabels = dadosGraficos.consumo_por_dia.map(d => d.label || `Dia ${d.dia}`);
+        const diasLabels = dadosGraficos.consumo_por_dia.map(d => `Dia ${d.dia}`);
         const consumoDados = dadosGraficos.consumo_por_dia.map(d => d.consumo_litros);
 
         new Chart(ctxDia, {
@@ -322,79 +385,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-
-    // ============ GRÁFICO 4: TOP 10 LOTES POR CONSUMO NO ANO ============
-    const ctxTopLotes = document.getElementById('chartTopLotes');
-    if (ctxTopLotes && dadosGraficos.top_lotes && dadosGraficos.top_lotes.length > 0) {
-        const labelsTop = dadosGraficos.top_lotes.map(item => `Lote ${item.lote}`);
-        const valoresTop = dadosGraficos.top_lotes.map(item => item.consumo_litros);
-
-        new Chart(ctxTopLotes, {
-            type: 'bar',
-            data: {
-                labels: labelsTop,
-                datasets: [{
-                    label: 'Consumo no Ano (Litros)',
-                    data: valoresTop,
-                    backgroundColor: 'rgba(8, 145, 178, 0.85)',
-                    borderColor: '#0891b2',
-                    borderWidth: 1,
-                    borderRadius: 4,
-                }]
-            },
-            options: {
-                indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'top',
-                        labels: {
-                            font: { size: 12 },
-                            padding: 15,
-                        }
-                    },
-                    tooltip: {
-                        backgroundColor: 'rgba(0,0,0,0.7)',
-                        padding: 12,
-                        titleFont: { size: 13 },
-                        bodyFont: { size: 12 },
-                        callbacks: {
-                            label: function(context) {
-                                return `${context.parsed.x.toLocaleString('pt-BR', {maximumFractionDigits: 0})} L`;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        beginAtZero: true,
-                        ticks: {
-                            callback: function(value) {
-                                return value.toLocaleString('pt-BR') + ' L';
-                            },
-                            font: { size: 11 }
-                        },
-                        title: {
-                            display: true,
-                            text: 'Litros no Ano'
-                        }
-                    },
-                    y: {
-                        ticks: {
-                            font: { size: 11 }
-                        }
-                    }
-                }
-            }
-        });
-    }
 });
 </script>
 
 <style>
-.graficos-consumo-page {
+.graficos-lote-page {
     animation: fadeIn 0.3s ease-in;
 }
 

@@ -9,6 +9,7 @@ Sistema completo para gerenciamento e monitoramento de consumo de água através
 - ✅ API RESTful completa
 - ✅ Interface web intuitiva com dashboard
 - ✅ Gráficos interativos de consumo
+- ✅ **Exportação de relatórios em PDF e Excel**
 - ✅ Histórico completo de leituras
 - ✅ Validação de dados
 - ✅ Suporte a fotos de leituras
@@ -20,7 +21,17 @@ Sistema completo para gerenciamento e monitoramento de consumo de água através
 - **API:** Django REST Framework
 - **Frontend:** HTML5, CSS3, JavaScript
 - **Gráficos:** Chart.js
+- **Relatórios:** ReportLab (PDF), openpyxl (Excel)
 - **Outras:** Pandas, Matplotlib, Pillow
+
+## 📚 Documentação
+
+- [Início Rápido](docs/INICIO_RAPIDO.md) - Guia para começar rapidamente
+- [Comandos Úteis](docs/COMANDOS.md) - Lista de comandos Django disponíveis
+- [Documentação da API](docs/API.md) - Referência completa da API REST
+- [Guia de Gráficos](docs/GUIA_USO_GRAFICOS.md) - Como usar os gráficos do sistema
+- [**Exportação de Relatórios**](docs/EXPORTACAO_RELATORIOS.md) - Como exportar relatórios em PDF e Excel
+- [Projeto Completo](docs/PROJETO_COMPLETO.md) - Documentação técnica completa
 
 ## 📦 Instalação
 
@@ -216,8 +227,14 @@ controle de consumo de agua/
    - Consumo acumulado
    - Consumo por período
    - Top 10 maiores consumos
+   - **Exportação em PDF e Excel**
 
-5. **Admin** (`/admin/`)
+5. **Gráficos por Lote** (`/lotes/{id}/graficos/`)
+   - Consumo do lote específico
+   - Análise mensal e anual
+   - **Exportação de relatórios individuais**
+
+6. **Admin** (`/admin/`)
    - Painel administrativo completo
    - Gerenciamento de todos os dados
 
@@ -263,7 +280,7 @@ Conforme mencionado, você pode adicionar:
 
 - [ ] Autenticação JWT para API
 - [ ] Notificações de consumo anormal
-- [ ] Exportação de relatórios (PDF, Excel)
+- [x] **Exportação de relatórios (PDF, Excel)** ✅
 - [ ] Sistema de alertas por email
 - [ ] Dashboard mobile responsivo
 - [ ] Integração com sensores IoT

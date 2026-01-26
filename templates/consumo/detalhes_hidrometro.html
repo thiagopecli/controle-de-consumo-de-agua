@@ -1,4 +1,5 @@
 {% extends 'consumo/base.html' %}
+{% load filtros_personalizados %}
 
 {% block title %}Hidrômetro {{ hidrometro.numero }} - Sistema de Controle de Água{% endblock %}
 
@@ -93,7 +94,7 @@
                     <td>
                         {% if leitura.consumo_desde_ultima_leitura_litros > 0 %}
                         <span style="color: #0891b2; font-weight: 700;">
-                            {{ leitura.consumo_desde_ultima_leitura_litros|floatformat:0 }} L
+                            {{ leitura.consumo_desde_ultima_leitura_litros|floatformat:0|formatar_litros }} L
                         </span>
                         {% else %}
                         <span style="color: #94a3b8;">Primeira leitura</span>
@@ -142,7 +143,7 @@
                     <p style="margin-top: 0.5rem; font-size: 0.875rem; color: var(--secondary-color);">
                         {% if leitura.periodo == 'manha' %}🌅 Manhã{% else %}🌆 Tarde{% endif %}
                         {% if leitura.consumo_desde_ultima_leitura_litros > 0 %}
-                        | <span style="color: #0891b2; font-weight: 600;">{{ leitura.consumo_desde_ultima_leitura_litros|floatformat:0 }} L</span>
+                        | <span style="color: #0891b2; font-weight: 600;">{{ leitura.consumo_desde_ultima_leitura_litros|floatformat:0|formatar_litros }} L</span>
                         {% endif %}
                     </p>
                 </div>
