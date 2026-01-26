@@ -1,12 +1,12 @@
 from django.core.management.base import BaseCommand
-from consumo.models import Leitura, Hidrometro, Lote
+from consumo.models import Leitura
 import os
 import shutil
 from pathlib import Path
 
 
 class Command(BaseCommand):
-    help = 'Remove TODOS os dados do banco de dados (leituras, hidrômetros e lotes) e arquivos de mídia para preparar para produção'
+    help = 'Remove apenas leituras e arquivos de mídia, mantendo lotes e hidrômetros para produção'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -18,18 +18,14 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         # Contar registros
         total_leituras = Leitura.objects.count()
-        total_hidrometros = Hidrometro.objects.count()
-        total_lotes = Lote.objects.count()
         
-        total_registros = total_leituras + total_hidrometros + total_lotes
+        total_registros = total_leituras
         
         if total_registros == 0:
-            self.stdout.write(self.style.WARNING('Nenhum registro encontrado no banco de dados.'))
+            self.stdout.write(self.style.WARNING('Nenhuma leitura encontrada no banco de dados.'))
         else:
             self.stdout.write(self.style.WARNING(f'📊 Registros encontrados:'))
             self.stdout.write(self.style.WARNING(f'   - Leituras: {total_leituras}'))
-            self.stdout.write(self.style.WARNING(f'   - Hidrômetros: {total_hidrometros}'))
-            self.stdout.write(self.style.WARNING(f'   - Lotes: {total_lotes}'))
             self.stdout.write(self.style.WARNING(f'   - TOTAL: {total_registros}'))
         
         # Verificar arquivos de mídia
@@ -48,12 +44,6 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING('\n🗑️  Deletando registros...'))
                 Leitura.objects.all().delete()
                 self.stdout.write(self.style.SUCCESS(f'   ✅ {total_leituras} leituras deletadas'))
-                
-                Hidrometro.objects.all().delete()
-                self.stdout.write(self.style.SUCCESS(f'   ✅ {total_hidrometros} hidrômetros deletados'))
-                
-                Lote.objects.all().delete()
-                self.stdout.write(self.style.SUCCESS(f'   ✅ {total_lotes} lotes deletados'))
             
             # Deletar arquivos de mídia
             if media_path.exists() and arquivos_encontrados:
@@ -65,10 +55,11 @@ class Command(BaseCommand):
                 gitkeep_file.touch()
                 self.stdout.write(self.style.SUCCESS(f'   ✅ {len(arquivos_encontrados)} arquivos de mídia deletados'))
             
-            self.stdout.write(self.style.SUCCESS('\n✅ Banco de dados limpo com sucesso!'))
-            self.stdout.write(self.style.SUCCESS('✅ Sistema pronto para produção (sem dados)!'))
+                self.stdout.write(self.style.SUCCESS('\n✅ Leituras e mídias limpas com sucesso!'))
+                self.stdout.write(self.style.SUCCESS('✅ Sistema pronto para produção (lotes e hidrômetros mantidos)!'))
         else:
             self.stdout.write(self.style.ERROR('\n⚠️  ATENÇÃO: Esta operação é IRREVERSÍVEL!'))
-            self.stdout.write(self.style.ERROR('⚠️  Todos os dados serão permanentemente deletados.'))
+            self.stdout.write(self.style.ERROR('⚠️  Todas as leituras e mídias serão permanentemente deletadas.'))
+            self.stdout.write(self.style.WARNING('⚠️  Lotes e hidrômetros serão mantidos.'))
             self.stdout.write(self.style.WARNING('\n💡 Execute novamente com --confirmar para deletar:'))
             self.stdout.write(self.style.WARNING('   python manage.py limpar_dados_producao --confirmar'))
