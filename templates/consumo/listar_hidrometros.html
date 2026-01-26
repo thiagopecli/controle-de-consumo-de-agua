@@ -20,12 +20,13 @@
                     <th>Localização</th>
                     <th>Data Instalação</th>
                     <th>Status</th>
+                    <th>Leitura de Hoje</th>
                     <th>Ações</th>
                 </tr>
             </thead>
             <tbody>
                 {% for hidrometro in hidrometros %}
-                <tr>
+                <tr class="{% if hidrometro.leituras_hoje %}row-leitura-hoje{% endif %}">
                     <td><strong>{{ hidrometro.numero }}</strong></td>
                     <td>{{ hidrometro.lote.numero }}{% if hidrometro.lote.tipo == 'administracao' %} (ADM){% endif %}</td>
                     <td>
@@ -42,6 +43,21 @@
                         <span class="badge badge-danger">Inativo</span>
                         {% endif %}
                     </td>
+                    <td class="coluna-leitura-hoje">
+                        {% if hidrometro.leituras_hoje %}
+                        <span class="status-pill status-ok">✔ Leitura registrada</span>
+                        <div class="status-meta">Última: {{ hidrometro.ultima_leitura|date:"d/m H:i" }}</div>
+                        {% else %}
+                        <span class="status-pill status-pending">Pendente</span>
+                        <div class="status-meta status-meta-muted">
+                            {% if hidrometro.ultima_leitura %}
+                                Última: {{ hidrometro.ultima_leitura|date:"d/m H:i" }}
+                            {% else %}
+                                Sem leituras registradas
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </td>
                     <td class="coluna-acoes">
                         <div class="btn-group-vertical">
                             <a href="{% url 'consumo:graficos_lote' hidrometro.lote.id %}" class="btn btn-sm btn-success">
@@ -55,7 +71,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="7" class="text-center">Nenhum hidrômetro cadastrado</td>
+                    <td colspan="8" class="text-center">Nenhum hidrômetro cadastrado</td>
                 </tr>
                 {% endfor %}
             </tbody>
