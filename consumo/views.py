@@ -346,31 +346,30 @@ def graficos_consumo(request):
             leitura_atual = leituras[i]
             leitura_anterior = leituras[i - 1]
 
-            # Consumo diário: só conta se as duas leituras são do mesmo dia
-            if leitura_atual.data_leitura.date() == leitura_anterior.data_leitura.date():
-                consumo_m3 = float(leitura_atual.leitura - leitura_anterior.leitura)
-                if consumo_m3 < 0:
-                    continue
-                consumo_litros = consumo_m3 * 1000
+            # Consumo diário: considera a diferença entre leituras consecutivas
+            consumo_m3 = float(leitura_atual.leitura - leitura_anterior.leitura)
+            if consumo_m3 < 0:
+                continue
 
-                dia = leitura_atual.data_leitura.date()
-                if dia in consumo_diario:
-                    consumo_diario[dia] += consumo_litros
+            consumo_litros = consumo_m3 * 1000
+            dia = leitura_atual.data_leitura.date()
+            if dia in consumo_diario:
+                consumo_diario[dia] += consumo_litros
 
-                consumo_total += consumo_litros
+            consumo_total += consumo_litros
 
-                if leitura_atual.periodo == 'manha':
-                    consumo_periodo_manha += consumo_litros
-                elif leitura_atual.periodo == 'tarde':
-                    consumo_periodo_tarde += consumo_litros
+            if leitura_atual.periodo == 'manha':
+                consumo_periodo_manha += consumo_litros
+            elif leitura_atual.periodo == 'tarde':
+                consumo_periodo_tarde += consumo_litros
 
-                mes_key = (leitura_atual.data_leitura.year, leitura_atual.data_leitura.month)
-                consumo_mensal.setdefault(mes_key, 0.0)
-                consumo_mensal[mes_key] += consumo_litros
+            mes_key = (leitura_atual.data_leitura.year, leitura_atual.data_leitura.month)
+            consumo_mensal.setdefault(mes_key, 0.0)
+            consumo_mensal[mes_key] += consumo_litros
 
-                numero_lote = leitura_atual.hidrometro.lote.numero
-                consumo_por_lote.setdefault(numero_lote, 0.0)
-                consumo_por_lote[numero_lote] += consumo_litros
+            numero_lote = leitura_atual.hidrometro.lote.numero
+            consumo_por_lote.setdefault(numero_lote, 0.0)
+            consumo_por_lote[numero_lote] += consumo_litros
 
     for dia in datas_periodo:
         dados_graficos['consumo_por_dia'].append({

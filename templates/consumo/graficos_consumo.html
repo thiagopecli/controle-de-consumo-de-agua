@@ -39,22 +39,6 @@
         </div>
 
         <div class="stat-card">
-            <div class="stat-icon">🌅</div>
-            <div class="stat-info">
-                <h3>Consumo Manhã</h3>
-                <p class="stat-value">{{ dados_graficos.consumo_periodo.manha|floatformat:0|formatar_litros }} L</p>
-            </div>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-icon">🌆</div>
-            <div class="stat-info">
-                <h3>Consumo Tarde</h3>
-                <p class="stat-value">{{ dados_graficos.consumo_periodo.tarde|floatformat:0|formatar_litros }} L</p>
-            </div>
-        </div>
-
-        <div class="stat-card">
             <div class="stat-icon">💧</div>
             <div class="stat-info">
                 <h3>Hidrômetros Ativos</h3>
@@ -89,18 +73,6 @@
         </div>
     </div>
 
-    <!-- Gráfico 3: Consumo por Período -->
-    <div class="chart-container" style="padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: white; margin-bottom: 3rem;">
-        <h3 style="color: var(--dark-text); margin-bottom: 1.5rem; font-size: 1.2rem;">
-            ⏰ Consumo por Período do Dia (Litros)
-        </h3>
-        <div style="position: relative; width: 100%; max-width: 500px; margin: 0 auto;">
-            <canvas id="chartConsumoPeriodo"></canvas>
-        </div>
-        <p style="font-size: 0.85rem; color: var(--secondary-color); margin-top: 1rem; text-align: center;">
-            Comparação entre o consumo matutino e vespertino do condomínio inteiro
-        </p>
-    </div>
 
     <!-- Gráfico 4: Top 10 lotes do ano -->
     <div class="chart-container" style="padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: white; margin-bottom: 3rem;">
@@ -272,56 +244,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // ============ GRÁFICO 3: CONSUMO POR PERÍODO ============
-    const ctxPeriodo = document.getElementById('chartConsumoPeriodo');
-    if (ctxPeriodo && dadosGraficos.consumo_periodo) {
-        const consumoManha = dadosGraficos.consumo_periodo.manha;
-        const consumoTarde = dadosGraficos.consumo_periodo.tarde;
-        const total = consumoManha + consumoTarde;
-
-        new Chart(ctxPeriodo, {
-            type: 'doughnut',
-            data: {
-                labels: ['🌅 Manhã', '🌆 Tarde'],
-                datasets: [{
-                    data: [consumoManha, consumoTarde],
-                    backgroundColor: [
-                        'rgba(8, 145, 178, 0.8)',
-                        'rgba(234, 88, 12, 0.8)'
-                    ],
-                    borderColor: ['#0891b2', '#ea580c'],
-                    borderWidth: 2,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'bottom',
-                        labels: {
-                            font: { size: 12 },
-                            padding: 20,
-                        }
-                    },
-                    tooltip: {
-                        backgroundColor: 'rgba(0,0,0,0.7)',
-                        padding: 12,
-                        titleFont: { size: 13 },
-                        bodyFont: { size: 12 },
-                        callbacks: {
-                            label: function(context) {
-                                const value = context.parsed;
-                                const percent = ((value / total) * 100).toFixed(1);
-                                return `${value.toLocaleString('pt-BR', {maximumFractionDigits: 0})} L (${percent}%)`;
-                            }
-                        }
-                    }
-                }
-            }
-        });
-    }
 
     // ============ GRÁFICO 4: TOP 10 LOTES POR CONSUMO NO ANO ============
     const ctxTopLotes = document.getElementById('chartTopLotes');

@@ -16,17 +16,10 @@ Foram implementadas novas funcionalidades para visualizar os gráficos de consum
 - Começa do dia 1 até o dia atual
 - Permite visualizar a tendência de consumo ao longo do período
 
-#### 3. **Consumo por Período do Dia** ⏰
-- Gráfico de pizza (rosca) comparando:
-  - 🌅 **Manhã**: Consumo entre leituras matutinas
-  - 🌆 **Tarde**: Consumo entre leituras vespertinas
-- Percentuais e valores em litros
 
 ### 📊 Cards de Resumo
 A página também exibe cards informativos com:
 - Consumo total do mês
-- Consumo da manhã
-- Consumo da tarde
 - Quantidade de hidrômetros ativos
 
 ## 🔧 Mudanças Técnicas
@@ -40,7 +33,7 @@ Nova function `graficos_lote()` que:
 - Retorna dados estruturados em JSON para os gráficos
 
 ### 2. **Template HTML** (`templates/consumo/graficos_lote.html`)
-- Nova página responsiva com 3 gráficos usando Chart.js
+- Nova página responsiva com 2 gráficos usando Chart.js
 - Cards de resumo com estatísticas
 - Tabelas de detalhes dos hidrômetros
 - Suportado em Desktop e Mobile
@@ -60,10 +53,9 @@ O botão "📊 Detalhes" foi alterado para:
 
 1. **Acesse a lista de hidrômetros** → Menu → "Lista de Hidrômetros"
 2. **Clique no botão "📊 Detalhes"** de qualquer hidrometro
-3. **Visualize os 3 gráficos do lote**:
+3. **Visualize os 2 gráficos do lote**:
    - Consumo diário
    - Consumo acumulado do mês
-   - Consumo por período (manhã/tarde)
 
 ## 📊 Detalhes dos Cálculos
 
@@ -107,7 +99,7 @@ Tarde: Diferença entre primeira e última leitura com período='tarde'
 ## ✅ Testes Recomendados
 
 - [ ] Clicar em "Detalhes" de um hidrometro da lista
-- [ ] Verificar se os 3 gráficos aparecem corretamente
+- [ ] Verificar se os 2 gráficos aparecem corretamente
 - [ ] Testar em diferentes navegadores (Chrome, Firefox, Edge)
 - [ ] Verificar responsividade em mobile
 - [ ] Validar cálculos com dados conhecidos

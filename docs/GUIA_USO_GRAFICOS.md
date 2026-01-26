@@ -27,8 +27,8 @@ Você será levado para uma página com:
 
 ┌──────────────────────────────────────────────────────┐
 │ Cards de Resumo:                                     │
-│  📈 Consumo Total    │ 🌅 Manhã    │ 🌆 Tarde │ 💧 |
-│  X.XXX L             │ X.XXX L     │ X.XXX L  │  # |
+│  📈 Consumo Total    │ 💧 Hidrômetros Ativos          │
+│  X.XXX L             │  #                             │
 └──────────────────────────────────────────────────────┘
 
 ┌──────────────────────┐  ┌──────────────────────┐
@@ -39,12 +39,6 @@ Você será levado para uma página com:
 │  por dia do mês      │  │  Acumulado do mês    │
 └──────────────────────┘  └──────────────────────┘
 
-┌──────────────────────────────────┐
-│  ⏰ Consumo por Período do Dia   │
-│  (Gráfico de Pizza/Rosca)        │
-│                                  │
-│  🌅 Manhã (azul) vs 🌆 Tarde (laranja)
-└──────────────────────────────────┘
 ```
 
 ---
@@ -70,15 +64,6 @@ Você será levado para uma página com:
   - Dia 2: 230 L (100 + 130)
   - Dia 3: 380 L (230 + 150)
 
-### ⏰ **Gráfico 3: Consumo por Período**
-- **O quê**: Comparação entre manhã e tarde
-- **Como ler**:
-  - 🌅 **Parte azul**: Consumo matutino
-  - 🌆 **Parte laranja**: Consumo vespertino
-  - Mostra percentual de cada período
-- **Exemplo**: 
-  - Manhã 60% (2.400 L)
-  - Tarde 40% (1.600 L)
 
 ---
 
@@ -119,10 +104,6 @@ Os gráficos mostram sempre o **mês atual** (janeiro 2026).
 3. Clique em "Hidrômetros do Lote" para ver cada equipamento
 4. Verifique se há algum problema (vazamento?)
 
-### Comparar Períodos (Manhã vs Tarde)
-1. Olhe o gráfico de pizza
-2. Veja se há diferença significativa
-3. Investigue possíveis razões (horário de uso, clima, etc)
 
 ### Entender a Tendência do Mês
 1. Observe o gráfico de linha (consumo acumulado)
