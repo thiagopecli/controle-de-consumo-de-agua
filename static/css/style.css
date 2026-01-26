@@ -381,6 +381,48 @@ body {
     transform: scale(1.01);
 }
 
+.row-leitura-hoje {
+    background: #f0fdf4;
+    position: relative;
+    border-left: 4px solid #16a34a;
+}
+
+.coluna-leitura-hoje {
+    white-space: nowrap;
+    min-width: 170px;
+}
+
+.status-pill {
+    display: inline-block;
+    padding: 0.35rem 0.8rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}
+
+.status-ok {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid rgba(22, 101, 52, 0.15);
+}
+
+.status-pending {
+    background: #fff7ed;
+    color: #9a3412;
+    border: 1px solid rgba(234, 88, 12, 0.2);
+}
+
+.status-meta {
+    font-size: 0.8rem;
+    color: #475569;
+    margin-top: 0.25rem;
+}
+
+.status-meta-muted {
+    color: #94a3b8;
+}
+
 /* Badges */
 .badge {
     display: inline-block;

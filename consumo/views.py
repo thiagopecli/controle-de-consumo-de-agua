@@ -1,6 +1,6 @@
 from django.shortcuts import render, get_object_or_404
 from django.utils import timezone
-from django.db.models import Sum, Avg, Max, Min, Count
+from django.db.models import Sum, Avg, Max, Min, Count, Q
 from django.http import HttpResponse
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
@@ -253,7 +253,15 @@ def dashboard(request):
 
 def listar_hidrometros(request):
     """Lista todos os hidrômetros"""
-    hidrometros = Hidrometro.objects.filter(ativo=True).select_related('lote')
+    hoje = timezone.localdate()
+    hidrometros = (
+        Hidrometro.objects.filter(ativo=True)
+        .select_related('lote')
+        .annotate(
+            leituras_hoje=Count('leituras', filter=Q(leituras__data_leitura__date=hoje)),
+            ultima_leitura=Max('leituras__data_leitura'),
+        )
+    )
     
     context = {
         'hidrometros': hidrometros,
