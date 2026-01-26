@@ -14,16 +14,68 @@
             </p>
         </div>
         <div style="display: flex; gap: 1rem;">
-            <a href="{% url 'consumo:exportar_graficos_consumo_pdf' %}" class="btn btn-primary" style="background: #e74c3c;">
+            <a href="{% url 'consumo:exportar_graficos_consumo_pdf' %}?{{ request.GET.urlencode }}" class="btn btn-primary" style="background: #e74c3c;">
                 📄 Baixar PDF
             </a>
-            <a href="{% url 'consumo:exportar_graficos_consumo_excel' %}" class="btn btn-primary" style="background: #27ae60;">
+            <a href="{% url 'consumo:exportar_graficos_consumo_excel' %}?{{ request.GET.urlencode }}" class="btn btn-primary" style="background: #27ae60;">
                 📊 Baixar Excel
             </a>
             <a href="{% url 'consumo:dashboard' %}" class="btn btn-secondary">
                 ← Voltar
             </a>
         </div>
+    </div>
+
+    <!-- Filtro de Período -->
+    <div style="background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 2rem;">
+        <h3 style="color: var(--dark-text); margin-bottom: 1rem; font-size: 1.1rem;">
+            🔍 Filtrar Período
+        </h3>
+        <form method="GET" action="{% url 'consumo:graficos_consumo' %}" id="filtro-periodo-form">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: end;">
+                <!-- Seleção de Período Pré-definido -->
+                <div>
+                    <label for="periodo" style="display: block; margin-bottom: 0.5rem; color: var(--dark-text); font-weight: 500;">
+                        Período:
+                    </label>
+                    <select name="periodo" id="periodo" class="form-control" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;">
+                        <option value="7dias" {% if dados_graficos.periodo_selecionado == '7dias' %}selected{% endif %}>Últimos 7 dias</option>
+                        <option value="15dias" {% if dados_graficos.periodo_selecionado == '15dias' %}selected{% endif %}>Últimos 15 dias</option>
+                        <option value="30dias" {% if dados_graficos.periodo_selecionado == '30dias' %}selected{% endif %}>Últimos 30 dias</option>
+                        <option value="mes_atual" {% if dados_graficos.periodo_selecionado == 'mes_atual' %}selected{% endif %}>Mês Atual</option>
+                        <option value="ano_atual" {% if dados_graficos.periodo_selecionado == 'ano_atual' %}selected{% endif %}>Ano Atual</option>
+                        <option value="personalizado" {% if dados_graficos.periodo_selecionado == 'personalizado' %}selected{% endif %}>Período Personalizado</option>
+                    </select>
+                </div>
+
+                <!-- Campos para Período Personalizado -->
+                <div id="periodo-personalizado-fields" style="display: none; grid-column: span 2; display: grid; grid-template-columns: 1fr 1fr auto; gap: 1rem; align-items: end;">
+                    <div>
+                        <label for="data_inicio" style="display: block; margin-bottom: 0.5rem; color: var(--dark-text); font-weight: 500;">
+                            Data Início:
+                        </label>
+                        <input type="date" name="data_inicio" id="data_inicio" class="form-control" 
+                               value="{{ request.GET.data_inicio }}"
+                               style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;">
+                    </div>
+                    <div>
+                        <label for="data_fim" style="display: block; margin-bottom: 0.5rem; color: var(--dark-text); font-weight: 500;">
+                            Data Fim:
+                        </label>
+                        <input type="date" name="data_fim" id="data_fim" class="form-control" 
+                               value="{{ request.GET.data_fim }}"
+                               style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;">
+                    </div>
+                </div>
+
+                <!-- Botão Filtrar -->
+                <div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.75rem;">
+                        🔍 Filtrar
+                    </button>
+                </div>
+            </div>
+        </form>
     </div>
 
     <!-- Cards de Resumo -->
@@ -33,8 +85,9 @@
         <div class="stat-card">
             <div class="stat-icon">📈</div>
             <div class="stat-info">
-                <h3>Consumo Total (Ano)</h3>
+                <h3>Consumo Total</h3>
                 <p class="stat-value">{{ dados_graficos.consumo_total_ano|floatformat:0|formatar_litros }} L</p>
+                <p style="font-size: 0.75rem; color: var(--secondary-color); margin-top: 0.25rem;">{{ dados_graficos.periodo_label }}</p>
             </div>
         </div>
 
@@ -74,14 +127,14 @@
     </div>
 
 
-    <!-- Gráfico 4: Top 10 lotes do ano -->
+    <!-- Gráfico 4: Top 10 lotes -->
     <div class="chart-container" style="padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: white; margin-bottom: 3rem;">
         <h3 style="color: var(--dark-text); margin-bottom: 1.5rem; font-size: 1.2rem;">
-            🏆 Top 10 Lotes por Consumo (Ano)
+            🏆 Top 10 Lotes por Consumo
         </h3>
         <canvas id="chartTopLotes"></canvas>
         <p style="font-size: 0.85rem; color: var(--secondary-color); margin-top: 1rem; text-align: center;">
-            Ranking dos 10 lotes com maior consumo no ano corrente (soma de todos os hidrômetros ativos)
+            Ranking dos 10 lotes com maior consumo no período selecionado (soma de todos os hidrômetros ativos)
         </p>
     </div>
 
@@ -404,5 +457,34 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 }
 </style>
+
+<script>
+// JavaScript para controlar a exibição dos campos de data personalizada
+document.addEventListener('DOMContentLoaded', function() {
+    const periodoSelect = document.getElementById('periodo');
+    const camposPersonalizados = document.getElementById('periodo-personalizado-fields');
+    
+    function toggleCamposPersonalizados() {
+        if (periodoSelect.value === 'personalizado') {
+            camposPersonalizados.style.display = 'grid';
+        } else {
+            camposPersonalizados.style.display = 'none';
+        }
+    }
+    
+    // Verificar no carregamento da página
+    toggleCamposPersonalizados();
+    
+    // Verificar quando o select mudar
+    periodoSelect.addEventListener('change', toggleCamposPersonalizados);
+    
+    // Auto-submit quando selecionar período pré-definido (não personalizado)
+    periodoSelect.addEventListener('change', function() {
+        if (this.value !== 'personalizado') {
+            document.getElementById('filtro-periodo-form').submit();
+        }
+    });
+});
+</script>
 
 {% endblock %}
