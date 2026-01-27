@@ -9,35 +9,18 @@ Sistema completo para gerenciamento e monitoramento de consumo de água através
 - ✅ API RESTful completa
 - ✅ Interface web intuitiva com dashboard
 - ✅ Gráficos interativos de consumo
-- ✅ **Exportação de relatórios em PDF e Excel**
-- ✅ Histórico completo de leituras
-- ✅ Validação de dados
-- ✅ Suporte a fotos de leituras
-
-## 🛠️ Tecnologias
-
-- **Backend:** Python 3.13, Django 5.0
-- **Banco de Dados:** PostgreSQL
 - **API:** Django REST Framework
-- **Frontend:** HTML5, CSS3, JavaScript
+ Sistema completo para gerenciamento e monitoramento de consumo de água através de hidrômetros, desenvolvido com Django, PostgreSQL e Django REST Framework.
 - **Gráficos:** Chart.js
 - **Relatórios:** ReportLab (PDF), openpyxl (Excel)
-- **Outras:** Pandas, Matplotlib, Pillow
-
-## 📚 Documentação
-
-- [Início Rápido](docs/INICIO_RAPIDO.md) - Guia para começar rapidamente
-- [Comandos Úteis](docs/COMANDOS.md) - Lista de comandos Django disponíveis
-- [Documentação da API](docs/API.md) - Referência completa da API REST
+ **Backend:** Python 3.10+, Django 5.0
 - [Guia de Gráficos](docs/GUIA_USO_GRAFICOS.md) - Como usar os gráficos do sistema
 - [**Exportação de Relatórios**](docs/EXPORTACAO_RELATORIOS.md) - Como exportar relatórios em PDF e Excel
 - [Projeto Completo](docs/PROJETO_COMPLETO.md) - Documentação técnica completa
+## 📚 Documentação
 
-## 📦 Instalação
-
-### Pré-requisitos
-
-- Python 3.10 ou superior
+- [Documentação Técnica do Projeto](docs/PROJETO_TECNICO.md) — Arquitetura, modelos, regras de negócio, API, páginas, relatórios, comandos, deploy, testes e boas práticas.
+- Navegador da API: acesse `/api/` no servidor para explorar endpoints (DRF Browsable API).
 - PostgreSQL 12 ou superior
 - Git
 
@@ -47,17 +30,16 @@ Sistema completo para gerenciamento e monitoramento de consumo de água através
 ```bash
 cd "c:\Users\Thiago Pereira\Documents\controle de consumo de agua"
 ```
-
-2. **Ative o ambiente virtual (já criado):**
+2. **Crie e ative um ambiente virtual (Windows):**
 ```powershell
+python -m venv .venv
 .venv\Scripts\Activate.ps1
 ```
+```
 
-3. **Configure o banco de dados PostgreSQL:**
+4. **Configure as variáveis de ambiente:**
 
-Crie o banco de dados no PostgreSQL:
-```sql
-CREATE DATABASE controle_agua;
+Crie o arquivo `.env` com suas configurações:
 CREATE USER postgres WITH PASSWORD 'sua_senha';
 GRANT ALL PRIVILEGES ON DATABASE controle_agua TO postgres;
 ```
@@ -103,7 +85,39 @@ python manage.py collectstatic --noinput
 python manage.py runserver
 ```
 
-Acesse: http://localhost:8000
+```
+controle de consumo de agua/
+├── .github/
+│   └── copilot-instructions.md     # Instruções do projeto
+├── consumo/                        # App principal
+│   ├── models.py                   # Modelos: Lote, Hidrometro, Leitura
+│   ├── views.py                    # Views e ViewSets da API + exportações
+│   ├── serializers.py              # Serializers DRF
+│   ├── admin.py                    # Configuração do Django Admin
+│   └── urls.py                     # URLs da aplicação
+├── hidrometro_project/             # Configurações do projeto
+│   ├── settings.py                 # Configurações gerais
+│   ├── urls.py                     # URLs principais
+│   └── wsgi.py                     # WSGI config
+├── templates/consumo/              # Templates HTML
+│   ├── base.html                   # Template base
+│   ├── dashboard.html              # Dashboard principal
+│   ├── listar_hidrometros.html
+│   ├── listar_leituras.html
+│   ├── registrar_leitura.html
+│   ├── graficos_consumo.html
+│   └── graficos_lote.html
+├── static/                         # Arquivos estáticos (CSS/JS)
+│   ├── css/style.css
+│   └── js/main.js
+├── media/                          # Upload de arquivos
+├── docs/                           # Documentação
+│   └── PROJETO_TECNICO.md          # Documentação técnica completa
+├── requirements.txt                # Dependências Python
+├── .env                            # Variáveis de ambiente
+├── .gitignore                      # Arquivos ignorados pelo Git
+└── README.md                       # Este arquivo
+```
 
 ## 📚 Estrutura do Projeto
 
@@ -190,6 +204,18 @@ controle de consumo de agua/
 - `DELETE /api/leituras/{id}/` - Deletar leitura
 - `GET /api/leituras/ultimas_leituras/` - Últimas leituras de todos os hidrômetros
 - `POST /api/leituras/leitura_em_lote/` - Criar múltiplas leituras
+
+## ⚙️ Funcionalidades da API
+- **CRUD completo:** `Lotes`, `Hidrômetros` e `Leituras` com criação, leitura, atualização e exclusão.
+- **Ações especializadas:** `consumo_total` por lote, `leituras_periodo` e `estatisticas` por hidrômetro, `ultimas_leituras` e `leitura_em_lote` (bulk) para leituras.
+- **Busca e filtros:** `?search=` em campos chave, filtros por `lote`, `ativo`, `hidrometro`, `data_inicio`, `data_fim`, `periodo`.
+- **Ordenação:** `?ordering=` por campos configurados (ex.: `numero`, `data_leitura`).
+- **Paginação:** Page size padrão de 100 itens, navegável via `?page=`.
+- **Validações:** Bloqueio de leituras decrescentes; tipos e faixas válidas; unicidade por (`hidrometro`, `data_leitura`, `periodo`).
+- **Uploads:** Suporte a envio de `foto` em `multipart/form-data` para leituras.
+- **CORS habilitado:** Acesso de frontends em `localhost:3000` por padrão.
+
+Mais detalhes técnicos: veja [docs/API_TECNICA.md](docs/API_TECNICA.md).
 
 ### Filtros de Query
 
