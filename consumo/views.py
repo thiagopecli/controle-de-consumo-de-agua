@@ -252,16 +252,24 @@ def dashboard(request):
 
 
 def listar_hidrometros(request):
-    """Lista todos os hidrômetros"""
+    """Lista todos os hidrômetros com paginação"""
+    from django.core.paginator import Paginator
+    
     hoje = timezone.localdate()
-    hidrometros = (
+    hidrometros_list = (
         Hidrometro.objects.filter(ativo=True)
         .select_related('lote')
         .annotate(
             leituras_hoje=Count('leituras', filter=Q(leituras__data_leitura__date=hoje)),
             ultima_leitura=Max('leituras__data_leitura'),
         )
+        .order_by('numero')
     )
+    
+    # Paginação: 50 hidrômetros por página
+    paginator = Paginator(hidrometros_list, 50)
+    page_number = request.GET.get('page', 1)
+    hidrometros = paginator.get_page(page_number)
     
     context = {
         'hidrometros': hidrometros,
@@ -271,11 +279,35 @@ def listar_hidrometros(request):
 
 
 def listar_leituras(request):
-    """Lista todas as leituras"""
-    leituras = Leitura.objects.all().select_related('hidrometro__lote').order_by('-data_leitura')
+    """Lista todas as leituras com paginação"""
+    from django.core.paginator import Paginator
+    
+    leituras_list = (
+        Leitura.objects.all()
+        .select_related('hidrometro__lote')
+        .order_by('-data_leitura')
+    )
+
+    # Filtro por lote (servidor): ainda paginando em 50 por página
+    lote_filtro = request.GET.get('lote', '').strip()
+    if lote_filtro:
+        if lote_filtro.lower() == 'adm':
+            # Filtrar todos os lotes de administração
+            leituras_list = leituras_list.filter(hidrometro__lote__tipo='administracao')
+        else:
+            # Filtro por número de lote específico (inclui possíveis valores como 'ADM-22')
+            leituras_list = leituras_list.filter(hidrometro__lote__numero=lote_filtro)
+
+    # Paginação: 50 leituras por página (sempre)
+    paginator = Paginator(leituras_list, 50)
+    page_number = request.GET.get('page', 1)
+    leituras = paginator.get_page(page_number)
+    total_leituras = paginator.count
     
     context = {
         'leituras': leituras,
+        'total_leituras': total_leituras,
+        'lote_filtro': lote_filtro,
     }
     
     return render(request, 'consumo/listar_leituras.html', context)
@@ -293,13 +325,133 @@ def registrar_leitura(request):
 
 
 def detalhes_hidrometro(request, hidrometro_id):
-    """Página com detalhes e histórico de leituras do hidrômetro"""
+    """Página com detalhes e histórico de leituras do hidrômetro com filtros e gráficos"""
+    from datetime import timedelta
+    from django.db.models import Sum
+    from collections import defaultdict
+    import calendar
+    
     hidrometro = get_object_or_404(Hidrometro, id=hidrometro_id)
-    leituras = hidrometro.leituras.all().order_by('-data_leitura')
+    
+    # Obter filtros de período
+    periodo = request.GET.get('periodo', '30dias')
+    data_inicio_str = request.GET.get('data_inicio', '')
+    data_fim_str = request.GET.get('data_fim', '')
+    
+    hoje = timezone.now().date()
+    data_inicio = None
+    data_fim = hoje
+    periodo_label = ''
+    
+    # Definir período baseado no filtro
+    if periodo == '7dias':
+        data_inicio = hoje - timedelta(days=7)
+        periodo_label = 'Últimos 7 dias'
+    elif periodo == '15dias':
+        data_inicio = hoje - timedelta(days=15)
+        periodo_label = 'Últimos 15 dias'
+    elif periodo == '30dias':
+        data_inicio = hoje - timedelta(days=30)
+        periodo_label = 'Últimos 30 dias'
+    elif periodo == 'mes_atual':
+        data_inicio = hoje.replace(day=1)
+        periodo_label = f'{hoje.strftime("%B de %Y").capitalize()}'
+    elif periodo == 'ano_atual':
+        data_inicio = hoje.replace(month=1, day=1)
+        periodo_label = f'Ano de {hoje.year}'
+    elif periodo == 'personalizado' and data_inicio_str and data_fim_str:
+        try:
+            from datetime import datetime
+            data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+            data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+            periodo_label = f'{data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}'
+        except:
+            data_inicio = hoje - timedelta(days=30)
+            data_fim = hoje
+            periodo_label = 'Últimos 30 dias'
+            periodo = '30dias'
+    else:
+        data_inicio = hoje - timedelta(days=30)
+        periodo_label = 'Últimos 30 dias'
+    
+    # Obter leituras filtradas
+    leituras = hidrometro.leituras.filter(
+        data_leitura__date__gte=data_inicio,
+        data_leitura__date__lte=data_fim
+    ).order_by('-data_leitura')
+    
+    # Obter todas as leituras para o histórico completo (limitado)
+    leituras_historico = hidrometro.leituras.all().order_by('-data_leitura')[:50]
+    
+    # Calcular consumo total no período
+    consumo_total_periodo = 0
+    leituras_ordenadas = hidrometro.leituras.filter(
+        data_leitura__date__gte=data_inicio,
+        data_leitura__date__lte=data_fim
+    ).order_by('data_leitura')
+    
+    for i, leitura_atual in enumerate(leituras_ordenadas):
+        if i > 0:
+            leitura_anterior = list(leituras_ordenadas)[i-1]
+            diferenca = float(leitura_atual.leitura) - float(leitura_anterior.leitura)
+            if diferenca > 0:
+                consumo_litros = diferenca * 1000
+                consumo_total_periodo += consumo_litros
+    
+    # Preparar dados para gráficos
+    # Gráfico 1: Consumo por Dia
+    consumo_por_dia = defaultdict(float)
+    for i, leitura_atual in enumerate(leituras_ordenadas):
+        if i > 0:
+            leitura_anterior = list(leituras_ordenadas)[i-1]
+            diferenca = float(leitura_atual.leitura) - float(leitura_anterior.leitura)
+            if diferenca > 0:
+                consumo_litros = diferenca * 1000
+                dia_str = leitura_atual.data_leitura.strftime('%d/%m')
+                consumo_por_dia[dia_str] += consumo_litros
+    
+    consumo_dia_lista = [
+        {'dia': dia, 'consumo_litros': consumo}
+        for dia, consumo in sorted(consumo_por_dia.items())
+    ]
+    
+    # Gráfico 2: Consumo por Mês
+    consumo_por_mes = defaultdict(float)
+    for i, leitura_atual in enumerate(leituras_ordenadas):
+        if i > 0:
+            leitura_anterior = list(leituras_ordenadas)[i-1]
+            diferenca = float(leitura_atual.leitura) - float(leitura_anterior.leitura)
+            if diferenca > 0:
+                consumo_litros = diferenca * 1000
+                mes_numero = leitura_atual.data_leitura.month
+                consumo_por_mes[mes_numero] += consumo_litros
+    
+    consumo_mes_lista = []
+    for mes in sorted(consumo_por_mes.keys()):
+        mes_nome = calendar.month_name[mes].capitalize() if mes <= 12 else f'Mês {mes}'
+        consumo_mes_lista.append({
+            'mes': mes,
+            'mes_nome': mes_nome,
+            'consumo_litros': consumo_por_mes[mes]
+        })
+    
+    # Dados dos gráficos (sem período do dia - removido do template)
+    dados_graficos = {
+        'consumo_dia': consumo_dia_lista,
+        'consumo_mes': consumo_mes_lista,
+        'consumo_total_periodo': consumo_total_periodo,
+        'periodo_label': periodo_label,
+        'periodo_selecionado': periodo,
+    }
+    
+    # Serializar dados para JSON
+    import json
+    dados_graficos_json = json.dumps(dados_graficos, ensure_ascii=False)
     
     context = {
         'hidrometro': hidrometro,
-        'leituras': leituras,
+        'leituras': leituras_historico,
+        'dados_graficos': dados_graficos_json,
     }
     
     return render(request, 'consumo/detalhes_hidrometro.html', context)
@@ -388,6 +540,7 @@ def graficos_consumo(request):
         'consumo_mes': [],
         'consumo_total_ano': 0.0,
         'top_lotes': [],
+        'consumo_por_hidrometro': [],
         'periodo_label': periodo_label,
         'periodo_selecionado': periodo_selecionado,
         'ano_atual': ano_atual,
@@ -407,6 +560,7 @@ def graficos_consumo(request):
     consumo_mensal = {}
     consumo_total_ano = 0.0
     consumo_por_lote_ano = {}
+    consumo_por_hidrometro = []
 
     for hidrometro in hidrometros_qs:
         # Buscar leituras do período filtrado para calcular o consumo total
@@ -415,7 +569,14 @@ def graficos_consumo(request):
             data_leitura__lte=data_fim
         ).order_by('data_leitura')
 
+        consumo_hidrometro_litros = 0.0
         if not leituras_ano.exists():
+            # Ainda assim queremos mostrar hidrômetros sem consumo
+            consumo_por_hidrometro.append({
+                'hidrometro': hidrometro.numero,
+                'lote': hidrometro.lote.numero,
+                'consumo_litros': 0.0,
+            })
             continue
 
         # Calcular consumo do ano (para total e top lotes)
@@ -429,6 +590,7 @@ def graficos_consumo(request):
 
             consumo_litros = consumo_m3 * 1000
             consumo_total_ano += consumo_litros
+            consumo_hidrometro_litros += consumo_litros
 
             # Consumo por lote (ano)
             numero_lote = leitura_atual.hidrometro.lote.numero
@@ -444,6 +606,12 @@ def graficos_consumo(request):
             dia = leitura_atual.data_leitura.date()
             if dia in consumo_diario:
                 consumo_diario[dia] += consumo_litros
+
+        consumo_por_hidrometro.append({
+            'hidrometro': hidrometro.numero,
+            'lote': hidrometro.lote.numero,
+            'consumo_litros': round(consumo_hidrometro_litros, 2),
+        })
 
     # Preparar dados dos gráficos
     for dia in datas_periodo:
@@ -473,6 +641,25 @@ def graficos_consumo(request):
         {'lote': lote, 'consumo_litros': round(consumo, 2)} for lote, consumo in top_lotes
     ]
 
+    def _ordenar_lote(item):
+        numero = item['lote']
+        # Lotes numéricos primeiro, ordenados por valor inteiro; depois lotes ADM/strings
+        try:
+            return (0, int(numero), numero)
+        except ValueError:
+            # Tentar extrair número após prefixo ADM-
+            if numero.upper().startswith('ADM-'):
+                try:
+                    return (1, int(numero.split('-', 1)[1]), numero)
+                except ValueError:
+                    return (1, float('inf'), numero)
+            return (1, float('inf'), numero)
+
+    dados_graficos['consumo_por_hidrometro'] = sorted(
+        consumo_por_hidrometro,
+        key=lambda x: (_ordenar_lote(x), x['hidrometro'])
+    )
+
     lotes_disponiveis = Lote.objects.filter(ativo=True).order_by('numero')
 
     context = {
@@ -485,173 +672,164 @@ def graficos_consumo(request):
 
 
 def graficos_lote(request, lote_id):
-    """Página com gráficos de consumo específicos de um lote"""
+    """Página com gráficos de consumo específicos de um lote com filtros de período"""
+    from collections import defaultdict
+    import calendar
+    
     lote = get_object_or_404(Lote, id=lote_id)
     
-    # Obter o mês e ano atual
-    hoje = timezone.now()
-    ano_atual = hoje.year
-    mes_atual = hoje.month
-    primeiro_dia_mes = hoje.replace(day=1)
+    # Obter filtros de período
+    periodo = request.GET.get('periodo', '30dias')
+    data_inicio_str = request.GET.get('data_inicio', '')
+    data_fim_str = request.GET.get('data_fim', '')
     
-    # Estrutura de dados para os gráficos
-    dados_graficos = {
-        'lote': lote.numero,
-        'tipo': lote.get_tipo_display(),
-        'mes': f"{primeiro_dia_mes.strftime('%B de %Y')}",
-        'consumo_por_dia': [],
-        'consumo_mes': [],
-        'consumo_periodo': {'manha': 0, 'tarde': 0},
-    }
+    hoje = timezone.now().date()
+    data_inicio = None
+    data_fim = hoje
+    periodo_label = ''
+    
+    # Definir período baseado no filtro
+    if periodo == '7dias':
+        data_inicio = hoje - timedelta(days=7)
+        periodo_label = 'Últimos 7 dias'
+    elif periodo == '15dias':
+        data_inicio = hoje - timedelta(days=15)
+        periodo_label = 'Últimos 15 dias'
+    elif periodo == '30dias':
+        data_inicio = hoje - timedelta(days=30)
+        periodo_label = 'Últimos 30 dias'
+    elif periodo == 'mes_atual':
+        data_inicio = hoje.replace(day=1)
+        periodo_label = f'{hoje.strftime("%B de %Y").capitalize()}'
+    elif periodo == 'ano_atual':
+        data_inicio = hoje.replace(month=1, day=1)
+        periodo_label = f'Ano de {hoje.year}'
+    elif periodo == 'personalizado' and data_inicio_str and data_fim_str:
+        try:
+            from datetime import datetime
+            data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+            data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+            periodo_label = f'{data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}'
+        except:
+            data_inicio = hoje - timedelta(days=30)
+            data_fim = hoje
+            periodo_label = 'Últimos 30 dias'
+            periodo = '30dias'
+    else:
+        data_inicio = hoje - timedelta(days=30)
+        periodo_label = 'Últimos 30 dias'
     
     # Obter todos os hidrômetros do lote
     hidrometros = lote.hidrometros.filter(ativo=True)
     
     if not hidrometros.exists():
+        dados_graficos = {
+            'lote': lote.numero,
+            'tipo': lote.get_tipo_display(),
+            'consumo_por_dia': [],
+            'consumo_mes': [],
+            'consumo_periodo': [],
+            'consumo_total_periodo': 0,
+            'periodo_label': periodo_label,
+            'periodo_selecionado': periodo,
+        }
+        
+        import json
+        dados_graficos_json = json.dumps(dados_graficos, ensure_ascii=False)
+        
         context = {
             'lote': lote,
-            'dados_graficos': dados_graficos,
+            'dados_graficos': dados_graficos_json,
             'sem_dados': True,
         }
         return render(request, 'consumo/graficos_lote.html', context)
     
-    # Nomes dos meses
-    nomes_meses = [
-        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    # Calcular consumo total no período para todos os hidrômetros do lote
+    consumo_total_periodo = 0
+    
+    for hidrometro in hidrometros:
+        leituras_ordenadas = hidrometro.leituras.filter(
+            data_leitura__date__gte=data_inicio,
+            data_leitura__date__lte=data_fim
+        ).order_by('data_leitura')
+        
+        for i, leitura_atual in enumerate(leituras_ordenadas):
+            if i > 0:
+                leitura_anterior = list(leituras_ordenadas)[i-1]
+                diferenca = float(leitura_atual.leitura) - float(leitura_anterior.leitura)
+                if diferenca > 0:
+                    consumo_litros = diferenca * 1000
+                    consumo_total_periodo += consumo_litros
+    
+    # Preparar dados para gráficos
+    # Gráfico 1: Consumo por Dia
+    consumo_por_dia = defaultdict(float)
+    
+    for hidrometro in hidrometros:
+        leituras_ordenadas = hidrometro.leituras.filter(
+            data_leitura__date__gte=data_inicio,
+            data_leitura__date__lte=data_fim
+        ).order_by('data_leitura')
+        
+        for i, leitura_atual in enumerate(leituras_ordenadas):
+            if i > 0:
+                leitura_anterior = list(leituras_ordenadas)[i-1]
+                diferenca = float(leitura_atual.leitura) - float(leitura_anterior.leitura)
+                if diferenca > 0:
+                    consumo_litros = diferenca * 1000
+                    dia_str = leitura_atual.data_leitura.strftime('%d/%m')
+                    consumo_por_dia[dia_str] += consumo_litros
+    
+    consumo_dia_lista = [
+        {'dia': dia, 'consumo_litros': consumo}
+        for dia, consumo in sorted(consumo_por_dia.items())
     ]
     
-    # Calcular o último dia do mês atual
-    if mes_atual == 12:
-        ultimo_dia_mes = primeiro_dia_mes.replace(year=ano_atual + 1, month=1, day=1) - timedelta(days=1)
-    else:
-        ultimo_dia_mes = primeiro_dia_mes.replace(month=mes_atual + 1, day=1) - timedelta(days=1)
-    
-    # ============ CONSUMO POR DIA DO MÊS ATUAL ============
-    consumo_diario = {}
-    for dia in range(1, ultimo_dia_mes.day + 1):
-        consumo_diario[dia] = 0.0
+    # Gráfico 2: Consumo por Mês
+    consumo_por_mes = defaultdict(float)
     
     for hidrometro in hidrometros:
-        leituras = hidrometro.leituras.filter(
-            data_leitura__gte=primeiro_dia_mes,
-            data_leitura__lte=ultimo_dia_mes
+        leituras_ordenadas = hidrometro.leituras.filter(
+            data_leitura__date__gte=data_inicio,
+            data_leitura__date__lte=data_fim
         ).order_by('data_leitura')
         
-        if leituras.exists():
-            for i in range(1, len(leituras)):
-                leitura_atual = leituras[i]
-                leitura_anterior = leituras[i - 1]
-                
-                # Considerar consumo apenas se está no mesmo dia
-                if leitura_atual.data_leitura.date() == leitura_anterior.data_leitura.date():
-                    dia = leitura_atual.data_leitura.day
-                    consumo_m3 = float(leitura_atual.leitura - leitura_anterior.leitura)
-                    consumo_litros = consumo_m3 * 1000
-                    consumo_diario[dia] += consumo_litros
+        for i, leitura_atual in enumerate(leituras_ordenadas):
+            if i > 0:
+                leitura_anterior = list(leituras_ordenadas)[i-1]
+                diferenca = float(leitura_atual.leitura) - float(leitura_anterior.leitura)
+                if diferenca > 0:
+                    consumo_litros = diferenca * 1000
+                    mes_numero = leitura_atual.data_leitura.month
+                    consumo_por_mes[mes_numero] += consumo_litros
     
-    # Montar dados de consumo por dia
-    for dia in range(1, ultimo_dia_mes.day + 1):
-        dados_graficos['consumo_por_dia'].append({
-            'dia': dia,
-            'consumo_litros': round(consumo_diario[dia], 2)
-        })
-    
-    # ============ CONSUMO POR MÊS DO ANO (para gráfico anual) ============
-    consumo_mensal = {}
-    for mes in range(1, 13):
-        consumo_mensal[mes] = 0.0
-        
-        # Determinar primeiro e último dia do mês
-        if mes == 12:
-            primeiro_dia_mes_loop = hoje.replace(month=mes, day=1)
-            ultimo_dia_mes_loop = primeiro_dia_mes_loop.replace(year=ano_atual + 1, month=1, day=1) - timedelta(days=1)
-        else:
-            primeiro_dia_mes_loop = hoje.replace(month=mes, day=1)
-            ultimo_dia_mes_loop = primeiro_dia_mes_loop.replace(month=mes + 1, day=1) - timedelta(days=1)
-        
-        # Se o mês ainda não começou, pular
-        if primeiro_dia_mes_loop > hoje:
-            continue
-        
-        # Ajustar o último dia para hoje se o mês atual não terminou
-        if mes == hoje.month:
-            ultimo_dia_mes_loop = hoje
-        
-        # Calcular consumo de cada hidrometro neste mês
-        for hidrometro in hidrometros:
-            leituras_mes = hidrometro.leituras.filter(
-                data_leitura__gte=primeiro_dia_mes_loop,
-                data_leitura__lte=ultimo_dia_mes_loop
-            ).order_by('data_leitura')
-            
-            if leituras_mes.count() >= 2:
-                primeira = leituras_mes.first()
-                ultima = leituras_mes.last()
-                consumo_m3 = float(ultima.leitura - primeira.leitura)
-                consumo_litros = consumo_m3 * 1000
-                consumo_mensal[mes] += consumo_litros
-    
-    # ============ CONSUMO TOTAL DO ANO E POR MÊS ============
-    consumo_total_ano = 0.0
-    for mes in range(1, 13):
-        consumo_total_ano += consumo_mensal[mes]
-    
-    # Adicionar dados de consumo por mês (sem acumulado)
-    for mes in range(1, 13):
-        dados_graficos['consumo_mes'].append({
+    consumo_mes_lista = []
+    for mes in sorted(consumo_por_mes.keys()):
+        mes_nome = calendar.month_name[mes].capitalize() if mes <= 12 else f'Mês {mes}'
+        consumo_mes_lista.append({
             'mes': mes,
-            'mes_nome': nomes_meses[mes - 1],
-            'consumo_litros': round(consumo_mensal[mes], 2)
+            'mes_nome': mes_nome,
+            'consumo_litros': consumo_por_mes[mes]
         })
     
-    # ============ CONSUMO POR PERÍODO (MANHÃ/TARDE) - ANO INTEIRO ============
-    consumo_periodo_manha = 0.0
-    consumo_periodo_tarde = 0.0
-    
-    primeiro_dia_ano = hoje.replace(month=1, day=1)
-    ultimo_dia_ano = hoje.replace(month=12, day=31)
-    
-    for hidrometro in hidrometros:
-        leituras_manha = hidrometro.leituras.filter(
-            data_leitura__gte=primeiro_dia_ano,
-            data_leitura__lte=ultimo_dia_ano,
-            periodo='manha'
-        ).order_by('data_leitura')
-        
-        leituras_tarde = hidrometro.leituras.filter(
-            data_leitura__gte=primeiro_dia_ano,
-            data_leitura__lte=ultimo_dia_ano,
-            periodo='tarde'
-        ).order_by('data_leitura')
-        
-        # Calcular consumo da manhã
-        if leituras_manha.count() >= 2:
-            primeira = leituras_manha.first()
-            ultima = leituras_manha.last()
-            consumo_m3 = float(ultima.leitura - primeira.leitura)
-            consumo_litros = consumo_m3 * 1000
-            consumo_periodo_manha += consumo_litros
-        
-        # Calcular consumo da tarde
-        if leituras_tarde.count() >= 2:
-            primeira = leituras_tarde.first()
-            ultima = leituras_tarde.last()
-            consumo_m3 = float(ultima.leitura - primeira.leitura)
-            consumo_litros = consumo_m3 * 1000
-            consumo_periodo_tarde += consumo_litros
-    
-    dados_graficos['consumo_periodo'] = {
-        'manha': round(consumo_periodo_manha, 2),
-        'tarde': round(consumo_periodo_tarde, 2),
+    # Dados dos gráficos (sem período do dia - removido do template)
+    dados_graficos = {
+        'lote': lote.numero,
+        'tipo': lote.get_tipo_display(),
+        'consumo_por_dia': consumo_dia_lista,
+        'consumo_mes': consumo_mes_lista,
+        'consumo_total_periodo': consumo_total_periodo,
+        'periodo_label': periodo_label,
+        'periodo_selecionado': periodo,
     }
     
-    dados_graficos['consumo_total_ano'] = round(consumo_total_ano, 2)
+    # Serializar dados para JSON
+    import json
+    dados_graficos_json = json.dumps(dados_graficos, ensure_ascii=False)
     
     context = {
         'lote': lote,
-        'dados_graficos': dados_graficos,
-        'consumo_total_mes': round(consumo_total_ano, 2),
+        'dados_graficos': dados_graficos_json,
         'hidrometros': hidrometros,
     }
     
@@ -749,6 +927,10 @@ def exportar_graficos_consumo_pdf(request):
         consumo_diario[dia_cursor.date()] = 0.0
         datas_periodo.append(dia_cursor.date())
         dia_cursor += timedelta(days=1)
+
+    # Consumo por hidrômetro (individual) no período
+    consumo_por_hidrometro = []
+    consumo_total_periodo = 0.0
     
     for hidrometro in hidrometros:
         leituras = hidrometro.leituras.filter(
@@ -756,33 +938,30 @@ def exportar_graficos_consumo_pdf(request):
             data_leitura__lte=data_fim
         ).order_by('data_leitura')
         
+        consumo_hidrometro_litros = 0.0
         if leituras.exists():
             for i in range(1, len(leituras)):
                 leitura_atual = leituras[i]
                 leitura_anterior = leituras[i - 1]
                 
-                if leitura_atual.data_leitura.date() == leitura_anterior.data_leitura.date():
-                    data_chave = leitura_atual.data_leitura.date()
-                    if data_chave in consumo_diario:
-                        consumo_m3 = float(leitura_atual.leitura - leitura_anterior.leitura)
-                        consumo_litros = consumo_m3 * 1000
-                        consumo_diario[data_chave] += consumo_litros
-    
-    # Calcular consumo total baseado no período filtrado
-    consumo_total_periodo = 0.0
-    
-    for hidrometro in hidrometros:
-        leituras_periodo = hidrometro.leituras.filter(
-            data_leitura__gte=data_inicio_dias,
-            data_leitura__lte=data_fim
-        ).order_by('data_leitura')
-        
-        if leituras_periodo.count() >= 2:
-            primeira = leituras_periodo.first()
-            ultima = leituras_periodo.last()
-            consumo_m3 = float(ultima.leitura - primeira.leitura)
-            consumo_litros = consumo_m3 * 1000
-            consumo_total_periodo += consumo_litros
+                consumo_m3 = float(leitura_atual.leitura - leitura_anterior.leitura)
+                if consumo_m3 < 0:
+                    continue
+                    
+                consumo_litros = consumo_m3 * 1000
+                consumo_hidrometro_litros += consumo_litros
+                consumo_total_periodo += consumo_litros
+                
+                # Consumo diário
+                dia = leitura_atual.data_leitura.date()
+                if dia in consumo_diario:
+                    consumo_diario[dia] += consumo_litros
+
+        consumo_por_hidrometro.append({
+            'hidrometro': hidrometro.numero,
+            'lote': hidrometro.lote.numero,
+            'consumo_litros': round(consumo_hidrometro_litros, 2),
+        })
     
     # Top 10 lotes por consumo (baseado no período filtrado)
     lotes_consumo = []
@@ -811,6 +990,24 @@ def exportar_graficos_consumo_pdf(request):
     
     lotes_consumo.sort(key=lambda x: x['consumo'], reverse=True)
     top_lotes = lotes_consumo[:10]
+
+    # Ordenar hidrômetros por lote (numéricos primeiro, depois ADM)
+    def _ordenar_lote(item):
+        numero = item['lote']
+        try:
+            return (0, int(numero), numero)
+        except ValueError:
+            if numero.upper().startswith('ADM-'):
+                try:
+                    return (1, int(numero.split('-', 1)[1]), numero)
+                except ValueError:
+                    return (1, float('inf'), numero)
+            return (1, float('inf'), numero)
+
+    consumo_por_hidrometro = sorted(
+        consumo_por_hidrometro,
+        key=lambda x: (_ordenar_lote(x), x['hidrometro'])
+    )
     
     # Criar PDF
     buffer = io.BytesIO()
@@ -963,6 +1160,36 @@ def exportar_graficos_consumo_pdf(request):
         elements.append(img_top)
     
     elements.append(Spacer(1, 0.3*inch))
+    elements.append(PageBreak())
+    
+    # Tabela: Consumo por Hidrômetro (período)
+    elements.append(Paragraph("📈 Consumo por Hidrômetro (período)", heading_style))
+
+    hidrometro_data = [['Hidrômetro', 'Lote', 'Consumo (L)']]
+    for item in consumo_por_hidrometro:
+        hidrometro_data.append([
+            item['hidrometro'],
+            item['lote'],
+            f"{item['consumo_litros']:,.0f}"
+        ])
+
+    hidrometro_table = Table(hidrometro_data, colWidths=[2*inch, 1.5*inch, 2*inch])
+    hidrometro_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2980b9')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+    ]))
+
+    elements.append(hidrometro_table)
+    elements.append(Spacer(1, 0.3*inch))
     
     # Construir PDF
     doc.build(elements)
@@ -1065,39 +1292,40 @@ def exportar_graficos_consumo_excel(request):
         datas_periodo.append(dia_cursor.date())
         dia_cursor += timedelta(days=1)
     
+    # Consumo por hidrômetro (individual) no período
+    consumo_por_hidrometro = []
+    consumo_total_periodo = 0.0
+    
     for hidrometro in hidrometros:
         leituras = hidrometro.leituras.filter(
             data_leitura__gte=data_inicio_dias,
             data_leitura__lte=data_fim
         ).order_by('data_leitura')
         
+        consumo_hidrometro_litros = 0.0
         if leituras.exists():
             for i in range(1, len(leituras)):
                 leitura_atual = leituras[i]
                 leitura_anterior = leituras[i - 1]
                 
-                if leitura_atual.data_leitura.date() == leitura_anterior.data_leitura.date():
-                    data_chave = leitura_atual.data_leitura.date()
-                    if data_chave in consumo_diario:
-                        consumo_m3 = float(leitura_atual.leitura - leitura_anterior.leitura)
-                        consumo_litros = consumo_m3 * 1000
-                        consumo_diario[data_chave] += consumo_litros
-    
-    # Calcular consumo total baseado no período filtrado
-    consumo_total_periodo = 0.0
-    
-    for hidrometro in hidrometros:
-        leituras_periodo = hidrometro.leituras.filter(
-            data_leitura__gte=data_inicio_ano,
-            data_leitura__lte=data_fim
-        ).order_by('data_leitura')
-        
-        if leituras_periodo.count() >= 2:
-            primeira = leituras_periodo.first()
-            ultima = leituras_periodo.last()
-            consumo_m3 = float(ultima.leitura - primeira.leitura)
-            consumo_litros = consumo_m3 * 1000
-            consumo_total_periodo += consumo_litros
+                consumo_m3 = float(leitura_atual.leitura - leitura_anterior.leitura)
+                if consumo_m3 < 0:
+                    continue
+                    
+                consumo_litros = consumo_m3 * 1000
+                consumo_hidrometro_litros += consumo_litros
+                consumo_total_periodo += consumo_litros
+                
+                # Consumo diário
+                dia = leitura_atual.data_leitura.date()
+                if dia in consumo_diario:
+                    consumo_diario[dia] += consumo_litros
+
+        consumo_por_hidrometro.append({
+            'hidrometro': hidrometro.numero,
+            'lote': hidrometro.lote.numero,
+            'consumo_litros': round(consumo_hidrometro_litros, 2),
+        })
     
     # Top 10 lotes por consumo (baseado no período filtrado)
     lotes_consumo = []
@@ -1126,6 +1354,24 @@ def exportar_graficos_consumo_excel(request):
     
     lotes_consumo.sort(key=lambda x: x['consumo'], reverse=True)
     top_lotes = lotes_consumo[:10]
+    
+    # Ordenar hidrômetros por lote (numéricos primeiro, depois ADM)
+    def _ordenar_lote(item):
+        numero = item['lote']
+        try:
+            return (0, int(numero), numero)
+        except ValueError:
+            if numero.upper().startswith('ADM-'):
+                try:
+                    return (1, int(numero.split('-', 1)[1]), numero)
+                except ValueError:
+                    return (1, float('inf'), numero)
+            return (1, float('inf'), numero)
+
+    consumo_por_hidrometro = sorted(
+        consumo_por_hidrometro,
+        key=lambda x: (_ordenar_lote(x), x['hidrometro'])
+    )
     
     # Criar Excel
     wb = Workbook()
@@ -1251,6 +1497,46 @@ def exportar_graficos_consumo_excel(request):
     
     for col in ['A', 'B', 'C', 'D']:
         ws_top.column_dimensions[col].width = 15
+
+    # Aba: Consumo por Hidrômetro
+    ws_hid = wb.create_sheet("Consumo por Hidrômetro")
+    ws_hid['A1'] = 'Hidrômetro'
+    ws_hid['B1'] = 'Lote'
+    ws_hid['C1'] = 'Consumo (L)'
+    for col in ['A1', 'B1', 'C1']:
+        ws_hid[col].font = Font(bold=True)
+
+    for idx, item in enumerate(consumo_por_hidrometro, start=2):
+        ws_hid[f'A{idx}'] = item['hidrometro']
+        ws_hid[f'B{idx}'] = item['lote']
+        ws_hid[f'C{idx}'] = item['consumo_litros']
+
+    for col in ['A', 'B', 'C']:
+        ws_hid.column_dimensions[col].width = 18
+
+    # Gráfico de barras por hidrômetro
+    if consumo_por_hidrometro:
+        plt.figure(figsize=(14, 6))
+        labels_h = [f"{item['hidrometro']} (Lote {item['lote']})" for item in consumo_por_hidrometro]
+        valores_h = [item['consumo_litros'] for item in consumo_por_hidrometro]
+        plt.bar(range(len(labels_h)), valores_h, color='#eab308', alpha=0.85)
+        plt.title(f'Consumo por Hidrômetro ({periodo_label})', fontsize=14, fontweight='bold')
+        plt.xlabel('Hidrômetro', fontsize=11)
+        plt.ylabel('Consumo (L)', fontsize=11)
+        plt.xticks(range(len(labels_h)), labels_h, rotation=60, ha='right', fontsize=8)
+        plt.grid(axis='y', alpha=0.3)
+        plt.tight_layout()
+
+        img_buffer_h = io.BytesIO()
+        plt.savefig(img_buffer_h, format='png', dpi=100, bbox_inches='tight')
+        img_buffer_h.seek(0)
+        plt.close()
+
+        from openpyxl.drawing.image import Image as XLImage
+        img_h_chart = XLImage(img_buffer_h)
+        img_h_chart.width = 700
+        img_h_chart.height = 320
+        ws_hid.add_image(img_h_chart, "E2")
     
     # Salvar e retornar
     buffer = io.BytesIO()

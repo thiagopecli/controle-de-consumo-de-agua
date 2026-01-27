@@ -9,21 +9,84 @@
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
         <div>
             <h2>📊 Gráficos de Consumo - Lote {{ lote.numero }}</h2>
-            <p style="color: var(--secondary-color); margin-top: 0.5rem;">
+            <p style="color: var(--secondary-color); margin-top: 0.5rem;" id="periodo-label">
                 Tipo: <span class="badge badge-{{ lote.tipo }}">{{ lote.get_tipo_display }}</span>
-                | Período: <strong>{{ dados_graficos.mes }}</strong>
             </p>
         </div>
         <div style="display: flex; gap: 1rem;">
-            <a href="{% url 'consumo:exportar_graficos_lote_pdf' lote.id %}" class="btn btn-primary" style="background: #e74c3c;">
+            <a href="{% url 'consumo:exportar_graficos_lote_pdf' lote.id %}?{{ request.GET.urlencode }}" class="btn btn-primary" style="background: #e74c3c;">
                 📄 Baixar PDF
             </a>
-            <a href="{% url 'consumo:exportar_graficos_lote_excel' lote.id %}" class="btn btn-primary" style="background: #27ae60;">
+            <a href="{% url 'consumo:exportar_graficos_lote_excel' lote.id %}?{{ request.GET.urlencode }}" class="btn btn-primary" style="background: #27ae60;">
                 📊 Baixar Excel
             </a>
             <a href="{% url 'consumo:listar_hidrometros' %}" class="btn btn-secondary">
                 ← Voltar para Lista
             </a>
+        </div>
+    </div>
+
+    <!-- Filtro de Período -->
+    <div style="background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 2rem;">
+        <h3 style="color: var(--dark-text); margin-bottom: 1rem; font-size: 1.1rem;">
+            🔍 Filtrar Período
+        </h3>
+        <form method="GET" action="{% url 'consumo:graficos_lote' lote.id %}" id="filtro-periodo-form">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: end;">
+                <!-- Seleção de Período Pré-definido -->
+                <div>
+                    <label for="periodo" style="display: block; margin-bottom: 0.5rem; color: var(--dark-text); font-weight: 500;">
+                        Período:
+                    </label>
+                    <select name="periodo" id="periodo" class="form-control" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;">
+                        <option value="7dias">Últimos 7 dias</option>
+                        <option value="15dias">Últimos 15 dias</option>
+                        <option value="30dias" selected>Últimos 30 dias</option>
+                        <option value="mes_atual">Mês Atual</option>
+                        <option value="ano_atual">Ano Atual</option>
+                        <option value="personalizado">Período Personalizado</option>
+                    </select>
+                </div>
+
+                <!-- Campos para Período Personalizado -->
+                <div id="periodo-personalizado-fields" style="display: none; grid-column: span 2; display: grid; grid-template-columns: 1fr 1fr auto; gap: 1rem; align-items: end;">
+                    <div>
+                        <label for="data_inicio" style="display: block; margin-bottom: 0.5rem; color: var(--dark-text); font-weight: 500;">
+                            Data Início:
+                        </label>
+                        <input type="date" name="data_inicio" id="data_inicio" class="form-control" 
+                               value="{{ request.GET.data_inicio }}"
+                               style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;">
+                    </div>
+                    <div>
+                        <label for="data_fim" style="display: block; margin-bottom: 0.5rem; color: var(--dark-text); font-weight: 500;">
+                            Data Fim:
+                        </label>
+                        <input type="date" name="data_fim" id="data_fim" class="form-control" 
+                               value="{{ request.GET.data_fim }}"
+                               style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;">
+                    </div>
+                </div>
+
+                <!-- Botão Filtrar -->
+                <div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.75rem;">
+                        🔍 Filtrar
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Card de Resumo -->
+    <div class="stats-grid" style="margin-bottom: 3rem;">
+        <div class="stat-card">
+            <div class="stat-icon">📈</div>
+            <div class="stat-info">
+                <h3>Consumo Total</h3>
+                <p class="stat-value" id="consumo-total-display">Carregando...</p>
+                <p style="font-size: 0.75rem; color: var(--secondary-color); margin-top: 0.25rem;" id="periodo-resumo">-</p>
+            </div>
         </div>
     </div>
 
@@ -39,25 +102,6 @@
         </p>
     </div>
     {% else %}
-
-    <!-- Cards de Resumo -->
-    <div class="stats-grid" style="margin-bottom: 3rem;">
-        <div class="stat-card">
-            <div class="stat-icon">📈</div>
-            <div class="stat-info">
-                <h3>Consumo Total (Ano)</h3>
-                <p class="stat-value">{{ dados_graficos.consumo_total_ano|floatformat:0|formatar_litros }} L</p>
-            </div>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-icon">💧</div>
-            <div class="stat-info">
-                <h3>Hidrômetros Ativos</h3>
-                <p class="stat-value">{{ hidrometros.count }}</p>
-            </div>
-        </div>
-    </div>
 
     <!-- Container dos Gráficos -->
     <div class="charts-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(700px, 1fr)); gap: 2rem; margin-bottom: 3rem;">
@@ -79,8 +123,8 @@
                 📊 Consumo por Mês do Ano (Litros)
             </h3>
             <canvas id="chartConsumoMes"></canvas>
-            <p style="font-size: 0.85rem; color: var(--secondary-color); margin-top: 1rem; text-align: center;">
-                Visualização mensal do consumo ao longo do ano (Total Acumulado: <strong>{{ dados_graficos.consumo_total_ano|floatformat:0|formatar_litros }} L</strong>)
+            <p style="font-size: 0.85rem; color: var(--secondary-color); margin-top: 1rem; text-align: center;" id="total-mes-descricao">
+                Visualização mensal do consumo ao longo do período
             </p>
         </div>
     </div>
@@ -133,7 +177,23 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Dados dos gráficos
-    const dadosGraficos = {{ dados_graficos|safe }};
+    const dadosGraficos = JSON.parse('{{ dados_graficos|escapejs }}');
+    
+    // Atualizar labels dinâmicos
+    document.getElementById('periodo-label').innerHTML = `Tipo: <span class="badge badge-{{ lote.tipo }}">{{ lote.get_tipo_display }}</span> | Período: <strong>${dadosGraficos.periodo_label}</strong>`;
+    document.getElementById('periodo-resumo').textContent = dadosGraficos.periodo_label;
+    
+    // Formatar e exibir consumo total
+    const consumoTotal = dadosGraficos.consumo_total_periodo;
+    const consumoFormatado = consumoTotal >= 1000 
+        ? (consumoTotal / 1000).toFixed(1).replace('.', ',') + ' mil' 
+        : Math.round(consumoTotal).toLocaleString('pt-BR');
+    document.getElementById('consumo-total-display').textContent = consumoFormatado + ' L';
+    document.getElementById('total-mes-descricao').innerHTML = `Visualização mensal do consumo (Total: <strong>${consumoFormatado} L</strong>)`;
+    
+    // Selecionar período correto no dropdown
+    const periodoSelect = document.getElementById('periodo');
+    periodoSelect.value = dadosGraficos.periodo_selecionado;
 
     // Cores customizadas
     const cores = {
@@ -284,6 +344,20 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // ============ CONTROLE DO PERÍODO PERSONALIZADO ============
+    const camposPersonalizados = document.getElementById('periodo-personalizado-fields');
+    
+    function toggleCamposPersonalizados() {
+        if (periodoSelect.value === 'personalizado') {
+            camposPersonalizados.style.display = 'grid';
+        } else {
+            camposPersonalizados.style.display = 'none';
+        }
+    }
+    
+    periodoSelect.addEventListener('change', toggleCamposPersonalizados);
+    toggleCamposPersonalizados();
+
 });
 </script>
 
@@ -316,63 +390,9 @@ document.addEventListener('DOMContentLoaded', function() {
     box-shadow: 0 4px 16px rgba(0,0,0,0.15);
 }
 
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-}
-
-.stat-card {
-    display: flex;
-    align-items: center;
-    padding: 1.5rem;
-    background: white;
-    border-radius: 10px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-.stat-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-}
-
-.stat-icon {
-    font-size: 2.5rem;
-    margin-right: 1.5rem;
-}
-
-.stat-info h3 {
-    margin: 0 0 0.5rem 0;
-    font-size: 0.95rem;
-    color: var(--secondary-color);
-    font-weight: 600;
-}
-
-.stat-value {
-    font-size: 1.8rem;
-    font-weight: 700;
-    color: var(--primary-color);
-    margin: 0;
-}
-
 @media (max-width: 768px) {
     .charts-container {
         grid-template-columns: 1fr !important;
-    }
-
-    .stat-card {
-        padding: 1rem;
-    }
-
-    .stat-icon {
-        font-size: 2rem;
-        margin-right: 1rem;
-    }
-
-    .stat-value {
-        font-size: 1.4rem;
     }
 }
 </style>

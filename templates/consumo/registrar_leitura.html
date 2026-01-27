@@ -8,6 +8,7 @@
     
     <div class="form-container">
         <form id="leituraForm">
+            {% csrf_token %}
             <div class="form-group">
                 <label for="hidrometro">Hidrômetro *</label>
                 <select id="hidrometro" name="hidrometro" class="form-control" required>
@@ -87,6 +88,22 @@
 </div>
 
 <script>
+// Função para obter cookie CSRF
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
 // Definir data e hora atual ao carregar a página
 document.addEventListener('DOMContentLoaded', function() {
     const now = new Date();
@@ -170,9 +187,16 @@ document.getElementById('leituraForm').addEventListener('submit', async function
         formData.append('foto', foto);
     }
     
+    // Obter CSRF token
+    const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                      getCookie('csrftoken');
+    
     try {
         const response = await fetch('/api/leituras/', {
             method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken
+            },
             body: formData
         });
         

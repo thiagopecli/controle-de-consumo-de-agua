@@ -7,9 +7,11 @@
 <div class="leituras-page">
     <h2>Histórico de Leituras</h2>
     
-    <div class="search-box">
-        <input type="text" id="searchInput" placeholder="Buscar por número do lote..." class="search-input">
-    </div>
+    <form method="get" class="search-box" style="display:flex; gap:0.5rem; align-items:center;">
+        <input type="text" id="searchInput" name="lote" value="{{ lote_filtro }}" placeholder="Buscar por número do lote ou 'ADM'..." class="search-input">
+        <button type="submit" class="btn btn-primary">Filtrar</button>
+        <a href="?" class="btn btn-secondary">Limpar</a>
+    </form>
     
     <div class="table-container">
         <table class="data-table" id="leiturasTable">
@@ -76,9 +78,29 @@
         </table>
     </div>
     
+    <!-- Paginação -->
+    {% if leituras.has_other_pages %}
+    <div style="margin-top: 2rem; display: flex; justify-content: center; align-items: center; gap: 1rem;">
+        {% if leituras.has_previous %}
+            <a href="?page=1{% if lote_filtro %}&lote={{ lote_filtro }}{% endif %}" class="btn btn-secondary">« Primeira</a>
+            <a href="?page={{ leituras.previous_page_number }}{% if lote_filtro %}&lote={{ lote_filtro }}{% endif %}" class="btn btn-secondary">‹ Anterior</a>
+        {% endif %}
+        
+        <span style="padding: 0.5rem 1rem; background: white; border-radius: 5px; font-weight: 600;">
+            Página {{ leituras.number }} de {{ leituras.paginator.num_pages }}
+        </span>
+        
+        {% if leituras.has_next %}
+            <a href="?page={{ leituras.next_page_number }}{% if lote_filtro %}&lote={{ lote_filtro }}{% endif %}" class="btn btn-secondary">Próxima ›</a>
+            <a href="?page={{ leituras.paginator.num_pages }}{% if lote_filtro %}&lote={{ lote_filtro }}{% endif %}" class="btn btn-secondary">Última »</a>
+        {% endif %}
+    </div>
+    {% endif %}
+    
     <div class="info-box" style="margin-top: 2rem;">
         <h3>ℹ️ Informações</h3>
-        <p><strong>Total de Leituras:</strong> {{ leituras.count }}</p>
+        <p><strong>Total de Leituras{% if lote_filtro %} (Lote {{ lote_filtro }}){% endif %}:</strong> {{ leituras.paginator.count|default:0 }}</p>
+        <p><strong>Exibindo:</strong> {{ leituras.start_index|default:0 }} - {{ leituras.end_index|default:0 }} de {{ leituras.paginator.count|default:0 }} leituras</p>
         <p>As leituras são ordenadas da mais recente para a mais antiga.</p>
     </div>
 </div>
@@ -86,42 +108,12 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('searchInput');
-    const table = document.getElementById('leiturasTable');
-    
-    if (searchInput && table) {
-        searchInput.addEventListener('keyup', function() {
-            const searchValue = this.value.trim();
-            const tbody = table.getElementsByTagName('tbody')[0];
-            if (!tbody) return;
-            
-            const rows = tbody.getElementsByTagName('tr');
-            
-            // Se digitar "adm" (case insensitive), mostra apenas lotes ADM
-            const buscaAdm = searchValue.toLowerCase() === 'adm';
-            
-            for (let row of rows) {
-                const cells = row.getElementsByTagName('td');
-                // Coluna 2 (índice 2) é o Lote
-                if (cells.length > 2) {
-                    const loteTextOriginal = cells[2].textContent.trim();
-                    const isAdm = loteTextOriginal.includes('(ADM)');
-                    
-                    // Se o campo está vazio, mostra todos
-                    if (searchValue === '') {
-                        row.style.display = '';
-                    } 
-                    // Se busca por "adm", mostra apenas lotes ADM
-                    else if (buscaAdm) {
-                        row.style.display = isAdm ? '' : 'none';
-                    }
-                    // Caso contrário, busca por número exato do lote
-                    else {
-                        let loteNumero = loteTextOriginal.replace(/\s*\(ADM\)\s*/gi, '').trim();
-                        row.style.display = loteNumero === searchValue ? '' : 'none';
-                    }
-                } else {
-                    row.style.display = '';
-                }
+    if (searchInput) {
+        // Submete o formulário ao pressionar Enter
+        searchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.form.submit();
             }
         });
     }

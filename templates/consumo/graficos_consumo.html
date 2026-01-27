@@ -126,6 +126,18 @@
         </div>
     </div>
 
+    <!-- Gráfico: Consumo por Hidrômetro (individualizado) -->
+    <div class="chart-container" style="padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: white; margin-bottom: 3rem; overflow-x: auto;">
+        <h3 style="color: var(--dark-text); margin-bottom: 1.5rem; font-size: 1.2rem; display: flex; align-items: center; gap: 0.5rem;">
+            📈 Consumo por Hidrômetro (período)
+            <span style="font-size: 0.9rem; color: var(--secondary-color); font-weight: 500;">Cada hidrômetro listado individualmente</span>
+        </h3>
+        <canvas id="chartConsumoHidrometro"></canvas>
+        <p style="font-size: 0.85rem; color: var(--secondary-color); margin-top: 1rem; text-align: center;">
+            Consumo individual por hidrômetro no período filtrado (litros)
+        </p>
+    </div>
+
 
     <!-- Gráfico 4: Top 10 lotes -->
     <div class="chart-container" style="padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: white; margin-bottom: 3rem;">
@@ -136,6 +148,35 @@
         <p style="font-size: 0.85rem; color: var(--secondary-color); margin-top: 1rem; text-align: center;">
             Ranking dos 10 lotes com maior consumo no período selecionado (soma de todos os hidrômetros ativos)
         </p>
+    </div>
+
+    <!-- Tabela de Consumo por Hidrômetro -->
+    <div class="chart-container" style="padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: white; margin-bottom: 3rem;">
+        <h3 style="color: var(--dark-text); margin-bottom: 1.5rem; font-size: 1.2rem;">Tabela - Consumo por Hidrômetro (período)</h3>
+        <div class="table-container" style="max-height: 500px; overflow: auto;">
+            <table class="data-table" style="font-size: 0.95rem; min-width: 600px;">
+                <thead>
+                    <tr>
+                        <th>Hidrômetro</th>
+                        <th>Lote</th>
+                        <th>Consumo (Litros)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in dados_graficos.consumo_por_hidrometro %}
+                    <tr>
+                        <td><strong>{{ item.hidrometro }}</strong></td>
+                        <td>{{ item.lote }}</td>
+                        <td>{{ item.consumo_litros|floatformat:0|formatar_litros }} L</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" style="text-align: center; color: var(--secondary-color);">Sem leituras no período selecionado.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 
 </div>
@@ -470,6 +511,83 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             camposPersonalizados.style.display = 'none';
         }
+    }
+
+    // ============ GRÁFICO 3: CONSUMO POR HIDRÔMETRO ============
+    const ctxHidrometro = document.getElementById('chartConsumoHidrometro');
+    if (ctxHidrometro && dadosGraficos.consumo_por_hidrometro.length > 0) {
+        const consumoHidrometro = dadosGraficos.consumo_por_hidrometro;
+        const labelsHidrometro = consumoHidrometro.map((item) => `${item.hidrometro} (Lote ${item.lote})`);
+        const valoresHidrometro = consumoHidrometro.map((item) => item.consumo_litros);
+
+        // Ajustar largura mínima para facilitar leitura quando há muitos hidrômetros
+        const minWidth = Math.max(700, labelsHidrometro.length * 40);
+        ctxHidrometro.style.minWidth = `${minWidth}px`;
+        if (ctxHidrometro.parentElement) {
+            ctxHidrometro.parentElement.style.overflowX = 'auto';
+        }
+
+        new Chart(ctxHidrometro, {
+            type: 'bar',
+            data: {
+                labels: labelsHidrometro,
+                datasets: [{
+                    label: 'Consumo por Hidrômetro (Litros)',
+                    data: valoresHidrometro,
+                    backgroundColor: cores.laranja,
+                    borderColor: 'rgba(234, 88, 12, 0.8)',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            font: { size: 12 },
+                            padding: 15,
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0,0,0,0.7)',
+                        padding: 12,
+                        titleFont: { size: 13 },
+                        bodyFont: { size: 12 },
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.parsed.y.toLocaleString('pt-BR', {maximumFractionDigits: 0})} L`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return value.toLocaleString('pt-BR') + ' L';
+                            },
+                            font: { size: 11 }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Litros'
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            maxRotation: 60,
+                            minRotation: 45,
+                            font: { size: 10 }
+                        }
+                    }
+                }
+            }
+        });
     }
     
     // Verificar no carregamento da página

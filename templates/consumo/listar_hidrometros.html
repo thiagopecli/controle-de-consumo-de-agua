@@ -77,6 +77,32 @@
             </tbody>
         </table>
     </div>
+    
+    <!-- Paginação -->
+    {% if hidrometros.has_other_pages %}
+    <div style="margin-top: 2rem; display: flex; justify-content: center; align-items: center; gap: 1rem;">
+        {% if hidrometros.has_previous %}
+            <a href="?page=1" class="btn btn-secondary">« Primeira</a>
+            <a href="?page={{ hidrometros.previous_page_number }}" class="btn btn-secondary">‹ Anterior</a>
+        {% endif %}
+        
+        <span style="padding: 0.5rem 1rem; background: white; border-radius: 5px; font-weight: 600;">
+            Página {{ hidrometros.number }} de {{ hidrometros.paginator.num_pages }}
+        </span>
+        
+        {% if hidrometros.has_next %}
+            <a href="?page={{ hidrometros.next_page_number }}" class="btn btn-secondary">Próxima ›</a>
+            <a href="?page={{ hidrometros.paginator.num_pages }}" class="btn btn-secondary">Última »</a>
+        {% endif %}
+    </div>
+    {% endif %}
+    
+    <div class="info-box" style="margin-top: 2rem;">
+        <h3>ℹ️ Informações</h3>
+        <p><strong>Total de Hidrômetros Ativos:</strong> {{ hidrometros.paginator.count|default:0 }}</p>
+        <p><strong>Exibindo:</strong> {{ hidrometros.start_index|default:0 }} - {{ hidrometros.end_index|default:0 }} de {{ hidrometros.paginator.count|default:0 }} hidrômetros</p>
+        <p>Os hidrômetros são ordenados por número.</p>
+    </div>
 </div>
 
 <script>
