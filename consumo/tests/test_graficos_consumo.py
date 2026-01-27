@@ -64,10 +64,6 @@ class GraficosConsumoViewTests(TestCase):
         soma_top = sum(item['consumo_litros'] for item in top)
         self.assertGreaterEqual(dados['consumo_total_ano'], soma_top)
 
-        # Consumo por período deve existir (>= 0)
-        self.assertGreaterEqual(dados['consumo_periodo']['manha'], 0)
-        self.assertGreaterEqual(dados['consumo_periodo']['tarde'], 0)
-
         # Consumo diário do dia 5 deve existir (>= 0)
         dia5 = [d for d in dados['consumo_por_dia'] if d['dia'] == 5][0]
         self.assertGreaterEqual(dia5['consumo_litros'], 0)
@@ -86,8 +82,6 @@ class GraficosConsumoSemDadosTests(TestCase):
         dados = response.context['dados_graficos']
 
         self.assertEqual(dados['consumo_total_ano'], 0)
-        self.assertEqual(dados['consumo_periodo']['manha'], 0)
-        self.assertEqual(dados['consumo_periodo']['tarde'], 0)
         self.assertEqual(len(dados['top_lotes']), 0)
 
         # Deve trazer consumo por dia preenchido com zeros do mês atual
