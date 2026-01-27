@@ -29,13 +29,15 @@ class HtmlViewsSmokeTests(TestCase):
         resp = self.client.get(reverse('consumo:listar_hidrometros'))
         self.assertEqual(resp.status_code, 200)
         self.assertIn('hidrometros', resp.context)
-        self.assertTrue(resp.context['hidrometros'].exists())
+        # hidrometros é um Page object (paginado), então verificar count
+        self.assertGreater(resp.context['hidrometros'].paginator.count, 0)
 
     def test_listar_leituras(self):
         resp = self.client.get(reverse('consumo:listar_leituras'))
         self.assertEqual(resp.status_code, 200)
         self.assertIn('leituras', resp.context)
-        self.assertTrue(resp.context['leituras'].exists())
+        # leituras é um Page object (paginado), então verificar count
+        self.assertGreater(resp.context['total_leituras'], 0)
 
     def test_registrar_leitura(self):
         resp = self.client.get(reverse('consumo:registrar_leitura'))
