@@ -215,6 +215,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     borderColor: 'rgba(8, 145, 178, 0.8)',
                     borderWidth: 1,
                     borderRadius: 4,
+                    maxBarThickness: 36,
+                    barPercentage: 0.8,
+                    categoryPercentage: 0.8,
                 }]
             },
             options: {
@@ -272,22 +275,19 @@ document.addEventListener('DOMContentLoaded', function() {
         const consumoAcumulado = dadosGraficos.consumo_mes.map(d => d.consumo_litros);
 
         new Chart(ctxMes, {
-            type: 'line',
+            type: 'bar',
             data: {
                 labels: diasMesLabels,
                 datasets: [{
                     label: 'Consumo por Mês (Litros)',
                     data: consumoAcumulado,
-                    borderColor: cores.verde,
-                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                    borderWidth: 3,
-                    fill: true,
-                    tension: 0.4,
-                    pointBackgroundColor: cores.verde,
-                    pointBorderColor: '#fff',
-                    pointBorderWidth: 2,
-                    pointRadius: 4,
-                    pointHoverRadius: 6,
+                    backgroundColor: 'rgba(34, 197, 94, 0.85)',
+                    borderColor: 'rgba(34, 197, 94, 1)',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    maxBarThickness: 36,
+                    barPercentage: 0.8,
+                    categoryPercentage: 0.8,
                 }]
             },
             options: {
@@ -356,6 +356,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     borderColor: '#0891b2',
                     borderWidth: 1,
                     borderRadius: 4,
+                    maxBarThickness: 24,
+                    barPercentage: 0.9,
+                    categoryPercentage: 0.9,
                 }]
             },
             options: {
@@ -502,6 +505,14 @@ document.addEventListener('DOMContentLoaded', function() {
 <script>
 // JavaScript para controlar a exibição dos campos de data personalizada
 document.addEventListener('DOMContentLoaded', function() {
+    const dadosGraficos = {{ dados_graficos|safe }};
+    const cores = {
+        azul: 'rgba(8, 145, 178, 1)',
+        laranja: 'rgba(234, 88, 12, 1)',
+        verde: 'rgba(34, 197, 94, 1)',
+        vermelho: 'rgba(239, 68, 68, 1)',
+        roxo: 'rgba(168, 85, 247, 1)',
+    };
     const periodoSelect = document.getElementById('periodo');
     const camposPersonalizados = document.getElementById('periodo-personalizado-fields');
     
@@ -520,11 +531,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const labelsHidrometro = consumoHidrometro.map((item) => `${item.hidrometro} (Lote ${item.lote})`);
         const valoresHidrometro = consumoHidrometro.map((item) => item.consumo_litros);
 
-        // Ajustar largura mínima para facilitar leitura quando há muitos hidrômetros
+        // Ajustar tamanho do canvas para evitar distorcao e borrado
         const minWidth = Math.max(700, labelsHidrometro.length * 40);
-        ctxHidrometro.style.minWidth = `${minWidth}px`;
+        const canvasHeight = 420;
+        ctxHidrometro.style.width = `${minWidth}px`;
+        ctxHidrometro.style.height = `${canvasHeight}px`;
+        ctxHidrometro.width = minWidth;
+        ctxHidrometro.height = canvasHeight;
         if (ctxHidrometro.parentElement) {
             ctxHidrometro.parentElement.style.overflowX = 'auto';
+            ctxHidrometro.parentElement.style.minHeight = `${canvasHeight + 40}px`;
         }
 
         new Chart(ctxHidrometro, {
@@ -538,6 +554,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     borderColor: 'rgba(234, 88, 12, 0.8)',
                     borderWidth: 1,
                     borderRadius: 4,
+                    maxBarThickness: 28,
+                    barPercentage: 0.9,
+                    categoryPercentage: 0.9,
                 }]
             },
             options: {
