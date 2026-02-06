@@ -23,7 +23,6 @@
                     <th>Tipo</th>
                     <th>Leitura (m³)</th>
                     <th>Consumo (Litros)</th>
-                    <th>Período</th>
                     <th>Responsável</th>
                     <th>Foto</th>
                     <th>Observações</th>
@@ -50,13 +49,6 @@
                         <span style="color: #94a3b8;">—</span>
                         {% endif %}
                     </td>
-                    <td>
-                        {% if leitura.periodo == 'manha' %}
-                        <span class="badge badge-info">🌅 Manhã</span>
-                        {% else %}
-                        <span class="badge badge-warning">🌆 Tarde</span>
-                        {% endif %}
-                    </td>
                     <td>{{ leitura.responsavel|default:"N/A" }}</td>
                     <td>
                         {% if leitura.foto %}
@@ -71,7 +63,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="10" class="text-center">Nenhuma leitura cadastrada</td>
+                    <td colspan="9" class="text-center">Nenhuma leitura cadastrada</td>
                 </tr>
                 {% endfor %}
             </tbody>

@@ -27,16 +27,9 @@
                     <input type="text" id="leitura" name="leitura" class="form-control" 
                            required placeholder="0,000" maxlength="9">
                 </div>
-                
-                <div class="form-group">
-                    <label for="periodo">Período *</label>
-                    <select id="periodo" name="periodo" class="form-control" required>
-                        <option value="">Selecione</option>
-                        <option value="manha">Manhã</option>
-                        <option value="tarde">Tarde</option>
-                    </select>
-                </div>
             </div>
+
+            <input type="hidden" id="periodo" name="periodo" value="">
             
             <div class="form-row">
                 <div class="form-group">
@@ -81,7 +74,6 @@
         <ul>
             <li>Preencha todos os campos obrigatórios marcados com *</li>
             <li>A leitura deve ser em metros cúbicos (m³)</li>
-            <li>Selecione o período correto: Manhã ou Tarde</li>
             <li>A foto é opcional mas recomendada para registro</li>
         </ul>
     </div>
@@ -108,7 +100,28 @@ function getCookie(name) {
 document.addEventListener('DOMContentLoaded', function() {
     const now = new Date();
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    document.getElementById('data_leitura').value = now.toISOString().slice(0, 16);
+    const dataLeituraInput = document.getElementById('data_leitura');
+    dataLeituraInput.value = now.toISOString().slice(0, 16);
+
+    function definirPeriodoPorHorario(valorDataHora) {
+        if (!valorDataHora) {
+            return;
+        }
+        const partes = valorDataHora.split('T');
+        if (partes.length < 2) {
+            return;
+        }
+        const hora = parseInt(partes[1].split(':')[0], 10);
+        if (Number.isNaN(hora)) {
+            return;
+        }
+        document.getElementById('periodo').value = hora < 12 ? 'manha' : 'tarde';
+    }
+
+    definirPeriodoPorHorario(dataLeituraInput.value);
+    dataLeituraInput.addEventListener('change', function() {
+        definirPeriodoPorHorario(this.value);
+    });
     
     // Formatar campo de leitura com vírgula
     const leituraInput = document.getElementById('leitura');
