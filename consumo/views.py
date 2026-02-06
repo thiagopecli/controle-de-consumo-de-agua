@@ -546,7 +546,10 @@ def graficos_consumo(request):
         'ano_atual': ano_atual,
     }
 
-    hidrometros_qs = Hidrometro.objects.filter(ativo=True).select_related('lote')
+    hidrometros_qs = Hidrometro.objects.filter(
+        ativo=True,
+        lote__tipo='residencial'
+    ).select_related('lote')
 
     # ================= CONSUMO POR DIA (ÚLTIMOS 30 DIAS) =================
     consumo_diario = {}
@@ -660,7 +663,10 @@ def graficos_consumo(request):
         key=lambda x: (_ordenar_lote(x), x['hidrometro'])
     )
 
-    lotes_disponiveis = Lote.objects.filter(ativo=True).order_by('numero')
+    lotes_disponiveis = Lote.objects.filter(
+        ativo=True,
+        tipo='residencial'
+    ).order_by('numero')
 
     context = {
         'dados_graficos': dados_graficos,
@@ -917,7 +923,10 @@ def exportar_graficos_consumo_pdf(request):
     data_fim = hoje
     
     # Buscar todos os hidrômetros ativos
-    hidrometros = Hidrometro.objects.filter(ativo=True).select_related('lote')
+    hidrometros = Hidrometro.objects.filter(
+        ativo=True,
+        lote__tipo='residencial'
+    ).select_related('lote')
     
     # Calcular consumo diário baseado no período filtrado
     consumo_diario = {}
@@ -965,7 +974,7 @@ def exportar_graficos_consumo_pdf(request):
     
     # Top 10 lotes por consumo (baseado no período filtrado)
     lotes_consumo = []
-    for lote in Lote.objects.filter(ativo=True):
+    for lote in Lote.objects.filter(ativo=True, tipo='residencial'):
         consumo_lote = 0.0
         hidrometros_lote = lote.hidrometros.filter(ativo=True)
         
@@ -1059,7 +1068,7 @@ def exportar_graficos_consumo_pdf(request):
         ['Período', periodo_label],
         ['Consumo Total', f'{consumo_total_periodo:,.0f} L'],
         ['Hidrômetros Ativos', str(hidrometros.count())],
-        ['Lotes Ativos', str(Lote.objects.filter(ativo=True).count())],
+        ['Lotes Ativos', str(Lote.objects.filter(ativo=True, tipo='residencial').count())],
     ]
     
     resumo_table = Table(resumo_data, colWidths=[3*inch, 2*inch])
@@ -1281,7 +1290,10 @@ def exportar_graficos_consumo_excel(request):
     data_fim = hoje
     
     # Buscar todos os hidrômetros ativos
-    hidrometros = Hidrometro.objects.filter(ativo=True).select_related('lote')
+    hidrometros = Hidrometro.objects.filter(
+        ativo=True,
+        lote__tipo='residencial'
+    ).select_related('lote')
     
     # Calcular consumo diário baseado no período filtrado
     consumo_diario = {}
@@ -1329,7 +1341,7 @@ def exportar_graficos_consumo_excel(request):
     
     # Top 10 lotes por consumo (baseado no período filtrado)
     lotes_consumo = []
-    for lote in Lote.objects.filter(ativo=True):
+    for lote in Lote.objects.filter(ativo=True, tipo='residencial'):
         consumo_lote = 0.0
         hidrometros_lote = lote.hidrometros.filter(ativo=True)
         
@@ -1401,7 +1413,7 @@ def exportar_graficos_consumo_excel(request):
         ['Período', periodo_label],
         ['Consumo Total', f'{consumo_total_periodo:,.0f} L'],
         ['Hidrômetros Ativos', hidrometros.count()],
-        ['Lotes Ativos', Lote.objects.filter(ativo=True).count()],
+        ['Lotes Ativos', Lote.objects.filter(ativo=True, tipo='residencial').count()],
     ]
     
     for idx, (indicador, valor) in enumerate(resumo_dados, start=5):
