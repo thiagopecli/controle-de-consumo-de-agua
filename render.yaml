@@ -12,7 +12,9 @@ services:
     startCommand: "gunicorn hidrometro_project.wsgi:application"
     envVars:
       - key: PYTHON_VERSION
-        value: "3.12.2"
+        value: 3.12.2
+      - key: MPLCONFIGDIR
+        value: /tmp/matplotlib
       - key: SECRET_KEY
         generateValue: true
       - key: DEBUG
