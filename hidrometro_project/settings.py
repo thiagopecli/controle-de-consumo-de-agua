@@ -141,6 +141,16 @@ USE_I18N = True
 USE_TZ = True
 
 
+# Session Configuration
+# https://docs.djangoproject.com/en/5.0/topics/http/sessions/
+SESSION_COOKIE_AGE = 7200  # 2 horas em segundos
+SESSION_SAVE_EVERY_REQUEST = True  # Renova sessão a cada requisição (inatividade)
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Mantém sessão após fechar navegador
+SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'False') == 'True'  # True em produção HTTPS
+SESSION_COOKIE_HTTPONLY = True  # Proteção contra XSS
+SESSION_COOKIE_SAMESITE = 'Lax'  # Proteção CSRF
+
+
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
