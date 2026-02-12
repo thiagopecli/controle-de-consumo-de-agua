@@ -18,12 +18,6 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
-os.environ.setdefault('MPLCONFIGDIR', '/tmp/matplotlib')
-
-import matplotlib
-matplotlib.use('Agg')  # Backend sem interface gráfica
-import matplotlib.pyplot as plt
-import numpy as np
 
 from .models import Lote, Hidrometro, Leitura
 from .serializers import (
@@ -844,6 +838,12 @@ def graficos_lote(request, lote_id):
 
 def exportar_graficos_consumo_pdf(request):
     """Exporta os gráficos de consumo do condomínio em PDF"""
+    import os
+    os.environ.setdefault('MPLCONFIGDIR', '/tmp/matplotlib')
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    
     from django.template.loader import render_to_string
     
     # Obter dados dos gráficos (mesma lógica da view graficos_consumo)
@@ -1215,6 +1215,12 @@ def exportar_graficos_consumo_pdf(request):
 
 def exportar_graficos_consumo_excel(request):
     """Exporta os gráficos de consumo do condomínio em Excel com gráficos"""
+    import os
+    os.environ.setdefault('MPLCONFIGDIR', '/tmp/matplotlib')
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    
     # Obter dados dos gráficos (mesma lógica da view graficos_consumo)
     agora = timezone.localtime(timezone.now())
     hoje = agora
@@ -1569,6 +1575,12 @@ def exportar_graficos_consumo_excel(request):
 
 def exportar_graficos_lote_pdf(request, lote_id):
     """Exporta os gráficos de consumo de um lote específico em PDF"""
+    import os
+    os.environ.setdefault('MPLCONFIGDIR', '/tmp/matplotlib')
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    
     lote = get_object_or_404(Lote, id=lote_id)
     
     # Obter dados do lote (mesma lógica da view graficos_lote)
@@ -1876,6 +1888,12 @@ def exportar_graficos_lote_pdf(request, lote_id):
 
 def exportar_graficos_lote_excel(request, lote_id):
     """Exporta os gráficos de consumo de um lote específico em Excel com gráficos"""
+    import os
+    os.environ.setdefault('MPLCONFIGDIR', '/tmp/matplotlib')
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    
     lote = get_object_or_404(Lote, id=lote_id)
     
     # Obter dados do lote (mesma lógica da view graficos_lote)
