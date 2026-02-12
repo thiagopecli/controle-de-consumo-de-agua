@@ -18,6 +18,8 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
+os.environ.setdefault('MPLCONFIGDIR', '/tmp/matplotlib')
+
 import matplotlib
 matplotlib.use('Agg')  # Backend sem interface gráfica
 import matplotlib.pyplot as plt
