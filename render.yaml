@@ -8,7 +8,7 @@ services:
     name: controle-agua
     env: python
     plan: free
-    buildCommand: "pip install -r requirements.txt; python manage.py collectstatic --noinput; python manage.py migrate"
+    buildCommand: "pip install -r requirements.txt; python manage.py collectstatic --noinput; python manage.py migrate; python manage.py create_superuser_if_missing"
     startCommand: "gunicorn hidrometro_project.wsgi:application"
     envVars:
       - key: PYTHON_VERSION
