@@ -6,14 +6,14 @@
 
 {% block content %}
 <div class="graficos-lote-page">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <div class="page-header">
         <div>
             <h2>📊 Gráficos de Consumo - Lote {{ lote.numero }}</h2>
             <p style="color: var(--secondary-color); margin-top: 0.5rem;" id="periodo-label">
                 Tipo: <span class="badge badge-{{ lote.tipo }}">{{ lote.get_tipo_display }}</span>
             </p>
         </div>
-        <div style="display: flex; gap: 1rem;">
+        <div class="page-actions">
             <a href="{% url 'consumo:exportar_graficos_lote_pdf' lote.id %}?{{ request.GET.urlencode }}" class="btn btn-primary" style="background: #e74c3c;">
                 📄 Baixar PDF
             </a>

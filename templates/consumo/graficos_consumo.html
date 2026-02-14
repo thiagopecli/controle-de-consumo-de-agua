@@ -6,14 +6,14 @@
 
 {% block content %}
 <div class="graficos-consumo-page">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <div class="page-header">
         <div>
             <h2>📊 Gráficos de Consumo dos Lotes Residenciais</h2>
             <p style="color: var(--secondary-color); margin-top: 0.5rem;">
                 Visualização filtrada do consumo dos 310 lotes residenciais — {{ dados_graficos.periodo_label }}
             </p>
         </div>
-        <div style="display: flex; gap: 1rem;">
+        <div class="page-actions">
             <a href="{% url 'consumo:exportar_graficos_consumo_pdf' %}?{{ request.GET.urlencode }}" class="btn btn-primary" style="background: #e74c3c;">
                 📄 Baixar PDF
             </a>
