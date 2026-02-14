@@ -41,6 +41,12 @@
             <a href="{% url 'consumo:graficos_consumo' %}" class="btn btn-secondary">
                 📈 Ver Gráficos
             </a>
+            {% url 'consumo:graficos_castelo' as castelo_url %}
+            {% if castelo_url %}
+            <a href="{{ castelo_url }}" class="btn btn-secondary">
+                🏰 Castelo Diario
+            </a>
+            {% endif %}
             <a href="{% url 'consumo:listar_hidrometros' %}" class="btn btn-secondary">
                 🔍 Ver Hidrômetros
             </a>

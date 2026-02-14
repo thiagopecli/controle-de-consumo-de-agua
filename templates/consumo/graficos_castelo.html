@@ -1,0 +1,241 @@
+{% extends 'consumo/base.html' %}
+{% load static %}
+
+{% block title %}Castelo - Consumo Diario{% endblock %}
+
+{% block content %}
+<div class="graficos-consumo-page">
+    <div class="page-header">
+        <div>
+            <h2>🏰 Castelo - Consumo Diario</h2>
+            <p style="color: var(--secondary-color); margin-top: 0.5rem;" id="periodo-label">
+                Leituras diarias (manha e tarde)
+            </p>
+        </div>
+        <div class="page-actions">
+            <a href="{% url 'consumo:dashboard' %}" class="btn btn-secondary">
+                ← Voltar
+            </a>
+        </div>
+    </div>
+
+    {% if not hidrometro_castelo %}
+    <div class="info-box" style="text-align: center; padding: 2rem;">
+        <p style="font-size: 1.1rem; color: var(--secondary-color);">
+            Nenhum hidrometro com numero "Castelo" foi encontrado.
+        </p>
+    </div>
+    {% else %}
+
+    <div class="info-box" style="margin-bottom: 1.5rem;">
+        <p style="margin: 0; color: var(--secondary-color);">
+            Este painel usa leituras diarias do hidrometro central (manha e tarde) para monitorar excesso de consumo ou vazamentos.
+        </p>
+    </div>
+
+    <!-- Filtro de Periodo -->
+    <div style="background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 2rem;">
+        <h3 style="color: var(--dark-text); margin-bottom: 1rem; font-size: 1.1rem;">
+            🔍 Filtrar Periodo
+        </h3>
+        <form method="GET" action="{% url 'consumo:graficos_castelo' %}" id="filtro-periodo-form">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: end;">
+                <div>
+                    <label for="periodo" style="display: block; margin-bottom: 0.5rem; color: var(--dark-text); font-weight: 500;">
+                        Periodo:
+                    </label>
+                    <select name="periodo" id="periodo" class="form-control" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;">
+                        <option value="7dias">Ultimos 7 dias</option>
+                        <option value="15dias">Ultimos 15 dias</option>
+                        <option value="30dias" selected>Ultimos 30 dias</option>
+                        <option value="mes_atual">Mes Atual</option>
+                        <option value="personalizado">Periodo Personalizado</option>
+                    </select>
+                </div>
+
+                <div id="periodo-personalizado-fields" style="display: none; grid-column: span 2; display: grid; grid-template-columns: 1fr 1fr auto; gap: 1rem; align-items: end;">
+                    <div>
+                        <label for="data_inicio" style="display: block; margin-bottom: 0.5rem; color: var(--dark-text); font-weight: 500;">
+                            Data Inicio:
+                        </label>
+                        <input type="date" name="data_inicio" id="data_inicio" class="form-control"
+                               value="{{ request.GET.data_inicio }}"
+                               style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;">
+                    </div>
+                    <div>
+                        <label for="data_fim" style="display: block; margin-bottom: 0.5rem; color: var(--dark-text); font-weight: 500;">
+                            Data Fim:
+                        </label>
+                        <input type="date" name="data_fim" id="data_fim" class="form-control"
+                               value="{{ request.GET.data_fim }}"
+                               style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;">
+                    </div>
+                </div>
+
+                <div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.75rem;">
+                        🔍 Filtrar
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="stats-grid" style="margin-bottom: 2rem;">
+        <div class="stat-card">
+            <div class="stat-icon">📈</div>
+            <div class="stat-info">
+                <h3>Consumo Hoje</h3>
+                <p class="stat-value" id="consumo-hoje">-</p>
+                <p style="font-size: 0.75rem; color: var(--secondary-color); margin-top: 0.25rem;" id="periodo-resumo">-</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">📊</div>
+            <div class="stat-info">
+                <h3>Media 7 dias</h3>
+                <p class="stat-value" id="media-7dias">-</p>
+                <p style="font-size: 0.75rem; color: var(--secondary-color); margin-top: 0.25rem;">Base para alerta</p>
+            </div>
+        </div>
+        <div class="stat-card" id="alerta-card" style="display: none;">
+            <div class="stat-icon">⚠️</div>
+            <div class="stat-info">
+                <h3>Alerta de Excesso</h3>
+                <p class="stat-value" id="alerta-texto">-</p>
+                <p style="font-size: 0.75rem; color: var(--secondary-color); margin-top: 0.25rem;">Acima do limite</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="chart-container" style="padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: white; margin-bottom: 3rem;">
+        <h3 style="color: var(--dark-text); margin-bottom: 1.5rem; font-size: 1.2rem;">
+            📅 Consumo Diario (Litros)
+        </h3>
+        <canvas id="chartCasteloDiario"></canvas>
+        <p style="font-size: 0.85rem; color: var(--secondary-color); margin-top: 1rem; text-align: center;">
+            Consumo calculado pela diferenca entre leitura da manha e da tarde
+        </p>
+    </div>
+
+    {% endif %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dadosGraficos = JSON.parse('{{ dados_graficos|escapejs }}');
+
+    const periodoSelect = document.getElementById('periodo');
+    const camposPersonalizados = document.getElementById('periodo-personalizado-fields');
+    if (periodoSelect) {
+        periodoSelect.value = dadosGraficos.periodo_selecionado || '30dias';
+        function toggleCamposPersonalizados() {
+            if (periodoSelect.value === 'personalizado') {
+                camposPersonalizados.style.display = 'grid';
+            } else {
+                camposPersonalizados.style.display = 'none';
+            }
+        }
+        periodoSelect.addEventListener('change', toggleCamposPersonalizados);
+        toggleCamposPersonalizados();
+    }
+
+    const periodoLabel = document.getElementById('periodo-label');
+    if (periodoLabel) {
+        periodoLabel.textContent = `Leituras diarias (manha e tarde) - ${dadosGraficos.periodo_label}`;
+    }
+
+    const consumoHoje = document.getElementById('consumo-hoje');
+    const media7dias = document.getElementById('media-7dias');
+    const periodoResumo = document.getElementById('periodo-resumo');
+    if (consumoHoje) {
+        consumoHoje.textContent = `${Math.round(dadosGraficos.consumo_hoje || 0).toLocaleString('pt-BR')} L`;
+    }
+    if (media7dias) {
+        media7dias.textContent = `${Math.round(dadosGraficos.media_7_dias || 0).toLocaleString('pt-BR')} L`;
+    }
+    if (periodoResumo) {
+        periodoResumo.textContent = dadosGraficos.periodo_label || '-';
+    }
+
+    const alertaCard = document.getElementById('alerta-card');
+    const alertaTexto = document.getElementById('alerta-texto');
+    if (alertaCard && alertaTexto && dadosGraficos.alerta_excesso) {
+        alertaCard.style.display = 'block';
+        alertaTexto.textContent = `${Math.round(dadosGraficos.limite_alerta).toLocaleString('pt-BR')} L`;
+    }
+
+    const ctx = document.getElementById('chartCasteloDiario');
+    if (ctx && dadosGraficos.consumo_por_dia && dadosGraficos.consumo_por_dia.length > 0) {
+        const labels = dadosGraficos.consumo_por_dia.map(item => item.dia);
+        const values = dadosGraficos.consumo_por_dia.map(item => item.consumo_litros);
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Consumo Diario (L)',
+                    data: values,
+                    backgroundColor: 'rgba(234, 88, 12, 0.85)',
+                    borderColor: 'rgba(234, 88, 12, 1)',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    maxBarThickness: 40,
+                    barPercentage: 0.8,
+                    categoryPercentage: 0.8,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            font: { size: 12 },
+                            padding: 15,
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0,0,0,0.7)',
+                        padding: 12,
+                        titleFont: { size: 13 },
+                        bodyFont: { size: 12 },
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.parsed.y.toLocaleString('pt-BR', {maximumFractionDigits: 0})} L`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return value.toLocaleString('pt-BR') + ' L';
+                            },
+                            font: { size: 11 }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Litros'
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            font: { size: 10 }
+                        }
+                    }
+                }
+            }
+        });
+    }
+});
+</script>
+
+{% endblock %}

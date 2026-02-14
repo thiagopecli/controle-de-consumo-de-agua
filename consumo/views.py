@@ -28,6 +28,24 @@ from .serializers import (
 )
 
 
+def _inicio_periodo_meses_datetime(base_dt, meses):
+    ano = base_dt.year
+    mes = base_dt.month - (meses - 1)
+    while mes <= 0:
+        mes += 12
+        ano -= 1
+    return base_dt.replace(year=ano, month=mes, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def _inicio_periodo_meses_date(base_date, meses):
+    ano = base_date.year
+    mes = base_date.month - (meses - 1)
+    while mes <= 0:
+        mes += 12
+        ano -= 1
+    return base_date.replace(year=ano, month=mes, day=1)
+
+
 class LoteViewSet(viewsets.ModelViewSet):
     """API endpoint para gerenciar lotes"""
     queryset = Lote.objects.all()
@@ -332,7 +350,7 @@ def detalhes_hidrometro(request, hidrometro_id):
     hidrometro = get_object_or_404(Hidrometro, id=hidrometro_id)
     
     # Obter filtros de período
-    periodo = request.GET.get('periodo', '30dias')
+    periodo = request.GET.get('periodo', '12meses')
     data_inicio_str = request.GET.get('data_inicio', '')
     data_fim_str = request.GET.get('data_fim', '')
     
@@ -342,7 +360,13 @@ def detalhes_hidrometro(request, hidrometro_id):
     periodo_label = ''
     
     # Definir período baseado no filtro
-    if periodo == '7dias':
+    if periodo == '6meses':
+        data_inicio = _inicio_periodo_meses_date(hoje, 6)
+        periodo_label = 'Ultimos 6 meses'
+    elif periodo == '12meses':
+        data_inicio = _inicio_periodo_meses_date(hoje, 12)
+        periodo_label = 'Ultimos 12 meses'
+    elif periodo == '7dias':
         data_inicio = hoje - timedelta(days=7)
         periodo_label = 'Últimos 7 dias'
     elif periodo == '15dias':
@@ -364,13 +388,13 @@ def detalhes_hidrometro(request, hidrometro_id):
             data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
             periodo_label = f'{data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}'
         except:
-            data_inicio = hoje - timedelta(days=30)
+            data_inicio = _inicio_periodo_meses_date(hoje, 12)
             data_fim = hoje
-            periodo_label = 'Últimos 30 dias'
-            periodo = '30dias'
+            periodo_label = 'Ultimos 12 meses'
+            periodo = '12meses'
     else:
-        data_inicio = hoje - timedelta(days=30)
-        periodo_label = 'Últimos 30 dias'
+        data_inicio = _inicio_periodo_meses_date(hoje, 12)
+        periodo_label = 'Ultimos 12 meses'
     
     # Obter leituras filtradas
     leituras = hidrometro.leituras.filter(
@@ -462,11 +486,21 @@ def graficos_consumo(request):
     hoje = agora
     ano_atual = hoje.year
     
-    # Obter o período selecionado (padrão: últimos 30 dias)
-    periodo_selecionado = request.GET.get('periodo', '30dias')
+    # Obter o período selecionado (padrao: ultimos 12 meses)
+    periodo_selecionado = request.GET.get('periodo', '12meses')
     
     # Definir data de início baseada no período selecionado
-    if periodo_selecionado == '7dias':
+    if periodo_selecionado == '6meses':
+        data_inicio_dias = _inicio_periodo_meses_datetime(hoje, 6)
+        data_inicio_ano = data_inicio_dias
+        dias_filtrados = (hoje - data_inicio_dias).days + 1
+        periodo_label = "Ultimos 6 meses"
+    elif periodo_selecionado == '12meses':
+        data_inicio_dias = _inicio_periodo_meses_datetime(hoje, 12)
+        data_inicio_ano = data_inicio_dias
+        dias_filtrados = (hoje - data_inicio_dias).days + 1
+        periodo_label = "Ultimos 12 meses"
+    elif periodo_selecionado == '7dias':
         dias_filtrados = 7
         data_inicio_dias = (hoje - timedelta(days=dias_filtrados - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
         data_inicio_ano = data_inicio_dias
@@ -515,22 +549,22 @@ def graficos_consumo(request):
                 hoje = data_fim_personalizada  # Usar data_fim personalizada
             except (ValueError, TypeError):
                 # Se houver erro, usar padrão (últimos 30 dias)
-                dias_filtrados = 30
-                data_inicio_dias = (hoje - timedelta(days=dias_filtrados - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                data_inicio_dias = _inicio_periodo_meses_datetime(hoje, 12)
                 data_inicio_ano = data_inicio_dias
-                periodo_label = "Últimos 30 dias (erro na data personalizada)"
+                dias_filtrados = (hoje - data_inicio_dias).days + 1
+                periodo_label = "Ultimos 12 meses (erro na data personalizada)"
         else:
             # Sem datas fornecidas, usar padrão
-            dias_filtrados = 30
-            data_inicio_dias = (hoje - timedelta(days=dias_filtrados - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            data_inicio_dias = _inicio_periodo_meses_datetime(hoje, 12)
             data_inicio_ano = data_inicio_dias
-            periodo_label = "Últimos 30 dias"
+            dias_filtrados = (hoje - data_inicio_dias).days + 1
+            periodo_label = "Ultimos 12 meses"
     else:
-        # Padrão: últimos 30 dias
-        dias_filtrados = 30
-        data_inicio_dias = (hoje - timedelta(days=dias_filtrados - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        # Padrao: ultimos 12 meses
+        data_inicio_dias = _inicio_periodo_meses_datetime(hoje, 12)
         data_inicio_ano = data_inicio_dias
-        periodo_label = "Últimos 30 dias"
+        dias_filtrados = (hoje - data_inicio_dias).days + 1
+        periodo_label = "Ultimos 12 meses"
     
     data_fim = hoje
 
@@ -549,15 +583,6 @@ def graficos_consumo(request):
         ativo=True,
         lote__tipo='residencial'
     ).select_related('lote')
-
-    # ================= CONSUMO POR DIA (ÚLTIMOS 30 DIAS) =================
-    consumo_diario = {}
-    datas_periodo = []
-    dia_cursor = data_inicio_dias
-    while dia_cursor.date() <= data_fim.date():
-        consumo_diario[dia_cursor.date()] = 0.0
-        datas_periodo.append(dia_cursor.date())
-        dia_cursor += timedelta(days=1)
 
     consumo_mensal = {}
     consumo_total_ano = 0.0
@@ -598,25 +623,12 @@ def graficos_consumo(request):
             consumo_mensal.setdefault(mes_key, 0.0)
             consumo_mensal[mes_key] += consumo_litros
 
-            # Consumo diário (apenas últimos 30 dias)
-            dia = leitura_atual.data_leitura.date()
-            if dia in consumo_diario:
-                consumo_diario[dia] += consumo_litros
-
         if consumo_hidrometro_litros > 0:
             consumo_por_hidrometro.append({
                 'hidrometro': hidrometro.numero,
                 'lote': hidrometro.lote.numero,
                 'consumo_litros': round(consumo_hidrometro_litros, 2),
             })
-
-    # Preparar dados dos gráficos
-    for dia in datas_periodo:
-        dados_graficos['consumo_por_dia'].append({
-            'dia': dia.day,
-            'label': dia.strftime('%d/%m'),
-            'consumo_litros': round(consumo_diario[dia], 2)
-        })
 
     nomes_meses = [
         'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
@@ -671,6 +683,126 @@ def graficos_consumo(request):
     return render(request, 'consumo/graficos_consumo.html', context)
 
 
+def graficos_castelo(request):
+    """Painel diario do hidrometro Castelo com alertas de consumo."""
+    agora = timezone.localtime(timezone.now())
+    hoje = agora
+
+    hidrometro_castelo = Hidrometro.objects.filter(
+        numero__iexact='Castelo',
+        ativo=True
+    ).select_related('lote').first()
+
+    if not hidrometro_castelo:
+        context = {
+            'hidrometro_castelo': None,
+            'dados_graficos': {
+                'consumo_por_dia': [],
+                'periodo_label': 'Sem dados',
+                'periodo_selecionado': '30dias',
+            }
+        }
+        return render(request, 'consumo/graficos_castelo.html', context)
+
+    periodo = request.GET.get('periodo', '30dias')
+    data_inicio_str = request.GET.get('data_inicio')
+    data_fim_str = request.GET.get('data_fim')
+
+    if periodo == '7dias':
+        data_inicio = (hoje - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
+        periodo_label = 'Ultimos 7 dias'
+    elif periodo == '15dias':
+        data_inicio = (hoje - timedelta(days=14)).replace(hour=0, minute=0, second=0, microsecond=0)
+        periodo_label = 'Ultimos 15 dias'
+    elif periodo == '30dias':
+        data_inicio = (hoje - timedelta(days=29)).replace(hour=0, minute=0, second=0, microsecond=0)
+        periodo_label = 'Ultimos 30 dias'
+    elif periodo == 'mes_atual':
+        data_inicio = hoje.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        periodo_label = f"Mes Atual ({hoje.strftime('%B/%Y')})"
+    elif periodo == 'personalizado' and data_inicio_str and data_fim_str:
+        try:
+            data_inicio = timezone.make_aware(
+                datetime.strptime(data_inicio_str, '%Y-%m-%d').replace(hour=0, minute=0, second=0, microsecond=0)
+            )
+            data_fim_personalizada = timezone.make_aware(
+                datetime.strptime(data_fim_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59, microsecond=999999)
+            )
+            if data_fim_personalizada > hoje:
+                data_fim_personalizada = hoje
+            periodo_label = f"{data_inicio.strftime('%d/%m/%Y')} ate {data_fim_personalizada.strftime('%d/%m/%Y')}"
+            hoje = data_fim_personalizada
+        except (ValueError, TypeError):
+            data_inicio = (hoje - timedelta(days=29)).replace(hour=0, minute=0, second=0, microsecond=0)
+            periodo_label = 'Ultimos 30 dias'
+            periodo = '30dias'
+    else:
+        data_inicio = (hoje - timedelta(days=29)).replace(hour=0, minute=0, second=0, microsecond=0)
+        periodo_label = 'Ultimos 30 dias'
+
+    data_fim = hoje
+
+    consumo_diario = {}
+    datas_periodo = []
+    dia_cursor = data_inicio
+    while dia_cursor.date() <= data_fim.date():
+        consumo_diario[dia_cursor.date()] = 0.0
+        datas_periodo.append(dia_cursor.date())
+        dia_cursor += timedelta(days=1)
+
+    leituras_periodo = hidrometro_castelo.leituras.filter(
+        data_leitura__gte=data_inicio,
+        data_leitura__lte=data_fim
+    ).order_by('data_leitura')
+
+    leituras_por_dia = {}
+    for leitura in leituras_periodo:
+        dia = leitura.data_leitura.date()
+        leituras_por_dia.setdefault(dia, []).append(leitura)
+
+    for dia, leituras_dia in leituras_por_dia.items():
+        if len(leituras_dia) >= 2:
+            consumo_m3 = float(leituras_dia[-1].leitura - leituras_dia[0].leitura)
+            if consumo_m3 > 0:
+                consumo_diario[dia] = consumo_m3 * 1000
+
+    consumo_por_dia = [
+        {
+            'dia': dia.strftime('%d/%m'),
+            'consumo_litros': round(consumo_diario[dia], 2)
+        }
+        for dia in datas_periodo
+    ]
+
+    hoje_consumo = round(consumo_diario.get(hoje.date(), 0.0), 2)
+    ultimos_7 = []
+    for offset in range(1, 8):
+        dia_ref = hoje.date() - timedelta(days=offset)
+        if dia_ref in consumo_diario:
+            ultimos_7.append(consumo_diario[dia_ref])
+
+    media_7_dias = round(sum(ultimos_7) / len(ultimos_7), 2) if ultimos_7 else 0.0
+    limite_alerta = media_7_dias * 1.3 if media_7_dias > 0 else 0.0
+    alerta_excesso = limite_alerta > 0 and hoje_consumo > limite_alerta
+
+    dados_graficos = {
+        'consumo_por_dia': consumo_por_dia,
+        'periodo_label': periodo_label,
+        'periodo_selecionado': periodo,
+        'consumo_hoje': hoje_consumo,
+        'media_7_dias': media_7_dias,
+        'alerta_excesso': alerta_excesso,
+        'limite_alerta': round(limite_alerta, 2),
+    }
+
+    context = {
+        'hidrometro_castelo': hidrometro_castelo,
+        'dados_graficos': json.dumps(dados_graficos, ensure_ascii=False),
+    }
+
+    return render(request, 'consumo/graficos_castelo.html', context)
+
+
 def graficos_lote(request, lote_id):
     """Página com gráficos de consumo específicos de um lote com filtros de período"""
     from collections import defaultdict
@@ -679,7 +811,7 @@ def graficos_lote(request, lote_id):
     lote = get_object_or_404(Lote, id=lote_id)
     
     # Obter filtros de período
-    periodo = request.GET.get('periodo', '30dias')
+    periodo = request.GET.get('periodo', '12meses')
     data_inicio_str = request.GET.get('data_inicio', '')
     data_fim_str = request.GET.get('data_fim', '')
     
@@ -689,7 +821,13 @@ def graficos_lote(request, lote_id):
     periodo_label = ''
     
     # Definir período baseado no filtro
-    if periodo == '7dias':
+    if periodo == '6meses':
+        data_inicio = _inicio_periodo_meses_date(hoje, 6)
+        periodo_label = 'Ultimos 6 meses'
+    elif periodo == '12meses':
+        data_inicio = _inicio_periodo_meses_date(hoje, 12)
+        periodo_label = 'Ultimos 12 meses'
+    elif periodo == '7dias':
         data_inicio = hoje - timedelta(days=7)
         periodo_label = 'Últimos 7 dias'
     elif periodo == '15dias':
@@ -711,13 +849,13 @@ def graficos_lote(request, lote_id):
             data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
             periodo_label = f'{data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}'
         except:
-            data_inicio = hoje - timedelta(days=30)
+            data_inicio = _inicio_periodo_meses_date(hoje, 12)
             data_fim = hoje
-            periodo_label = 'Últimos 30 dias'
-            periodo = '30dias'
+            periodo_label = 'Ultimos 12 meses'
+            periodo = '12meses'
     else:
-        data_inicio = hoje - timedelta(days=30)
-        periodo_label = 'Últimos 30 dias'
+        data_inicio = _inicio_periodo_meses_date(hoje, 12)
+        periodo_label = 'Ultimos 12 meses'
     
     # Obter todos os hidrômetros do lote
     hidrometros = lote.hidrometros.filter(ativo=True)
@@ -762,30 +900,7 @@ def graficos_lote(request, lote_id):
                     consumo_total_periodo += consumo_litros
     
     # Preparar dados para gráficos
-    # Gráfico 1: Consumo por Dia
-    consumo_por_dia = defaultdict(float)
-    
-    for hidrometro in hidrometros:
-        leituras_ordenadas = hidrometro.leituras.filter(
-            data_leitura__date__gte=data_inicio,
-            data_leitura__date__lte=data_fim
-        ).order_by('data_leitura')
-        
-        for i, leitura_atual in enumerate(leituras_ordenadas):
-            if i > 0:
-                leitura_anterior = list(leituras_ordenadas)[i-1]
-                diferenca = float(leitura_atual.leitura) - float(leitura_anterior.leitura)
-                if diferenca > 0:
-                    consumo_litros = diferenca * 1000
-                    dia_str = leitura_atual.data_leitura.strftime('%d/%m')
-                    consumo_por_dia[dia_str] += consumo_litros
-    
-    consumo_dia_lista = [
-        {'dia': dia, 'consumo_litros': consumo}
-        for dia, consumo in sorted(consumo_por_dia.items())
-    ]
-    
-    # Gráfico 2: Consumo por Mês
+    # Grafico: Consumo por Mes
     consumo_por_mes = defaultdict(float)
     
     for hidrometro in hidrometros:
@@ -800,23 +915,28 @@ def graficos_lote(request, lote_id):
                 diferenca = float(leitura_atual.leitura) - float(leitura_anterior.leitura)
                 if diferenca > 0:
                     consumo_litros = diferenca * 1000
-                    mes_numero = leitura_atual.data_leitura.month
-                    consumo_por_mes[mes_numero] += consumo_litros
+                    mes_key = (leitura_atual.data_leitura.year, leitura_atual.data_leitura.month)
+                    consumo_por_mes[mes_key] += consumo_litros
     
+    nomes_meses = [
+        'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+        'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'
+    ]
+
     consumo_mes_lista = []
-    for mes in sorted(consumo_por_mes.keys()):
-        mes_nome = calendar.month_name[mes].capitalize() if mes <= 12 else f'Mês {mes}'
+    for (ano, mes) in sorted(consumo_por_mes.keys()):
+        mes_nome = f"{nomes_meses[mes - 1]}/{str(ano)[-2:]}"
         consumo_mes_lista.append({
             'mes': mes,
             'mes_nome': mes_nome,
-            'consumo_litros': consumo_por_mes[mes]
+            'consumo_litros': consumo_por_mes[(ano, mes)]
         })
     
     # Dados dos gráficos (sem período do dia - removido do template)
     dados_graficos = {
         'lote': lote.numero,
         'tipo': lote.get_tipo_display(),
-        'consumo_por_dia': consumo_dia_lista,
+        'consumo_por_dia': [],
         'consumo_mes': consumo_mes_lista,
         'consumo_total_periodo': consumo_total_periodo,
         'periodo_label': periodo_label,
@@ -851,11 +971,21 @@ def exportar_graficos_consumo_pdf(request):
     hoje = agora
     ano_atual = hoje.year
     
-    # Obter o período selecionado (padrão: últimos 30 dias)
-    periodo_selecionado = request.GET.get('periodo', '30dias')
+    # Obter o período selecionado (padrao: ultimos 12 meses)
+    periodo_selecionado = request.GET.get('periodo', '12meses')
     
     # Definir data de início baseada no período selecionado
-    if periodo_selecionado == '7dias':
+    if periodo_selecionado == '6meses':
+        data_inicio_dias = _inicio_periodo_meses_datetime(hoje, 6)
+        data_inicio_ano = data_inicio_dias
+        dias_filtrados = (hoje - data_inicio_dias).days + 1
+        periodo_label = "Ultimos 6 meses"
+    elif periodo_selecionado == '12meses':
+        data_inicio_dias = _inicio_periodo_meses_datetime(hoje, 12)
+        data_inicio_ano = data_inicio_dias
+        dias_filtrados = (hoje - data_inicio_dias).days + 1
+        periodo_label = "Ultimos 12 meses"
+    elif periodo_selecionado == '7dias':
         dias_filtrados = 7
         data_inicio_dias = (hoje - timedelta(days=dias_filtrados - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
         data_inicio_ano = data_inicio_dias
@@ -904,22 +1034,22 @@ def exportar_graficos_consumo_pdf(request):
                 hoje = data_fim_personalizada  # Usar data_fim personalizada
             except (ValueError, TypeError):
                 # Se houver erro, usar padrão (últimos 30 dias)
-                dias_filtrados = 30
-                data_inicio_dias = (hoje - timedelta(days=dias_filtrados - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                data_inicio_dias = _inicio_periodo_meses_datetime(hoje, 12)
                 data_inicio_ano = data_inicio_dias
-                periodo_label = "Últimos 30 dias (erro na data personalizada)"
+                dias_filtrados = (hoje - data_inicio_dias).days + 1
+                periodo_label = "Ultimos 12 meses (erro na data personalizada)"
         else:
             # Sem datas fornecidas, usar padrão
-            dias_filtrados = 30
-            data_inicio_dias = (hoje - timedelta(days=dias_filtrados - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            data_inicio_dias = _inicio_periodo_meses_datetime(hoje, 12)
             data_inicio_ano = data_inicio_dias
-            periodo_label = "Últimos 30 dias"
+            dias_filtrados = (hoje - data_inicio_dias).days + 1
+            periodo_label = "Ultimos 12 meses"
     else:
-        # Padrão: últimos 30 dias
-        dias_filtrados = 30
-        data_inicio_dias = (hoje - timedelta(days=dias_filtrados - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        # Padrao: ultimos 12 meses
+        data_inicio_dias = _inicio_periodo_meses_datetime(hoje, 12)
         data_inicio_ano = data_inicio_dias
-        periodo_label = "Últimos 30 dias"
+        dias_filtrados = (hoje - data_inicio_dias).days + 1
+        periodo_label = "Ultimos 12 meses"
     
     data_fim = hoje
     
@@ -929,14 +1059,16 @@ def exportar_graficos_consumo_pdf(request):
         lote__tipo='residencial'
     ).select_related('lote')
     
-    # Calcular consumo diário baseado no período filtrado
-    consumo_diario = {}
-    datas_periodo = []
-    dia_cursor = data_inicio_dias
-    while dia_cursor.date() <= data_fim.date():
-        consumo_diario[dia_cursor.date()] = 0.0
-        datas_periodo.append(dia_cursor.date())
-        dia_cursor += timedelta(days=1)
+    # Calcular consumo mensal baseado no periodo filtrado
+    consumo_mensal = {}
+    meses_periodo = []
+    mes_cursor = data_inicio_dias.replace(day=1)
+    while mes_cursor.date() <= data_fim.date():
+        meses_periodo.append((mes_cursor.year, mes_cursor.month))
+        if mes_cursor.month == 12:
+            mes_cursor = mes_cursor.replace(year=mes_cursor.year + 1, month=1)
+        else:
+            mes_cursor = mes_cursor.replace(month=mes_cursor.month + 1)
 
     # Consumo por hidrômetro (individual) no período
     consumo_por_hidrometro = []
@@ -962,10 +1094,10 @@ def exportar_graficos_consumo_pdf(request):
                 consumo_hidrometro_litros += consumo_litros
                 consumo_total_periodo += consumo_litros
                 
-                # Consumo diário
-                dia = leitura_atual.data_leitura.date()
-                if dia in consumo_diario:
-                    consumo_diario[dia] += consumo_litros
+                # Consumo mensal
+                mes_key = (leitura_atual.data_leitura.year, leitura_atual.data_leitura.month)
+                consumo_mensal.setdefault(mes_key, 0.0)
+                consumo_mensal[mes_key] += consumo_litros
 
         if consumo_hidrometro_litros > 0:
             consumo_por_hidrometro.append({
@@ -1091,15 +1223,20 @@ def exportar_graficos_consumo_pdf(request):
     elements.append(resumo_table)
     elements.append(Spacer(1, 0.4*inch))
     
-    # Gráfico de Consumo Diário
-    elements.append(Paragraph("📈 Consumo Diário", heading_style))
-    
+    # Grafico de Consumo Mensal
+    elements.append(Paragraph("📈 Consumo Mensal", heading_style))
+
+    nomes_meses = [
+        'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+        'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'
+    ]
+
     plt.figure(figsize=(10, 5))
-    datas_labels = [d.strftime('%d/%m') for d in datas_periodo]
-    valores_diarios = [consumo_diario[d] for d in datas_periodo]
-    plt.plot(datas_labels, valores_diarios, marker='o', color='#3498db', linewidth=2, markersize=4)
-    plt.title(f'Consumo Diário - {periodo_label}', fontsize=14, fontweight='bold')
-    plt.xlabel('Data', fontsize=11)
+    meses_labels = [f"{nomes_meses[mes - 1]}/{str(ano)[-2:]}" for ano, mes in meses_periodo]
+    valores_mensais = [round(consumo_mensal.get((ano, mes), 0.0), 2) for ano, mes in meses_periodo]
+    plt.bar(meses_labels, valores_mensais, color='#3498db', alpha=0.8)
+    plt.title(f'Consumo Mensal - {periodo_label}', fontsize=14, fontweight='bold')
+    plt.xlabel('Mes', fontsize=11)
     plt.ylabel('Consumo (L)', fontsize=11)
     plt.xticks(rotation=45, ha='right')
     plt.grid(axis='y', alpha=0.3)
@@ -1226,11 +1363,21 @@ def exportar_graficos_consumo_excel(request):
     hoje = agora
     ano_atual = hoje.year
     
-    # Obter o período selecionado (padrão: últimos 30 dias)
-    periodo_selecionado = request.GET.get('periodo', '30dias')
+    # Obter o período selecionado (padrao: ultimos 12 meses)
+    periodo_selecionado = request.GET.get('periodo', '12meses')
     
     # Definir data de início baseada no período selecionado
-    if periodo_selecionado == '7dias':
+    if periodo_selecionado == '6meses':
+        data_inicio_dias = _inicio_periodo_meses_datetime(hoje, 6)
+        data_inicio_ano = data_inicio_dias
+        dias_filtrados = (hoje - data_inicio_dias).days + 1
+        periodo_label = "Ultimos 6 meses"
+    elif periodo_selecionado == '12meses':
+        data_inicio_dias = _inicio_periodo_meses_datetime(hoje, 12)
+        data_inicio_ano = data_inicio_dias
+        dias_filtrados = (hoje - data_inicio_dias).days + 1
+        periodo_label = "Ultimos 12 meses"
+    elif periodo_selecionado == '7dias':
         dias_filtrados = 7
         data_inicio_dias = (hoje - timedelta(days=dias_filtrados - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
         data_inicio_ano = data_inicio_dias
@@ -1279,22 +1426,22 @@ def exportar_graficos_consumo_excel(request):
                 hoje = data_fim_personalizada  # Usar data_fim personalizada
             except (ValueError, TypeError):
                 # Se houver erro, usar padrão (últimos 30 dias)
-                dias_filtrados = 30
-                data_inicio_dias = (hoje - timedelta(days=dias_filtrados - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                data_inicio_dias = _inicio_periodo_meses_datetime(hoje, 12)
                 data_inicio_ano = data_inicio_dias
-                periodo_label = "Últimos 30 dias (erro na data personalizada)"
+                dias_filtrados = (hoje - data_inicio_dias).days + 1
+                periodo_label = "Ultimos 12 meses (erro na data personalizada)"
         else:
             # Sem datas fornecidas, usar padrão
-            dias_filtrados = 30
-            data_inicio_dias = (hoje - timedelta(days=dias_filtrados - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            data_inicio_dias = _inicio_periodo_meses_datetime(hoje, 12)
             data_inicio_ano = data_inicio_dias
-            periodo_label = "Últimos 30 dias"
+            dias_filtrados = (hoje - data_inicio_dias).days + 1
+            periodo_label = "Ultimos 12 meses"
     else:
-        # Padrão: últimos 30 dias
-        dias_filtrados = 30
-        data_inicio_dias = (hoje - timedelta(days=dias_filtrados - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        # Padrao: ultimos 12 meses
+        data_inicio_dias = _inicio_periodo_meses_datetime(hoje, 12)
         data_inicio_ano = data_inicio_dias
-        periodo_label = "Últimos 30 dias"
+        dias_filtrados = (hoje - data_inicio_dias).days + 1
+        periodo_label = "Ultimos 12 meses"
     
     data_fim = hoje
     
@@ -1304,14 +1451,16 @@ def exportar_graficos_consumo_excel(request):
         lote__tipo='residencial'
     ).select_related('lote')
     
-    # Calcular consumo diário baseado no período filtrado
-    consumo_diario = {}
-    datas_periodo = []
-    dia_cursor = data_inicio_dias
-    while dia_cursor.date() <= data_fim.date():
-        consumo_diario[dia_cursor.date()] = 0.0
-        datas_periodo.append(dia_cursor.date())
-        dia_cursor += timedelta(days=1)
+    # Calcular consumo mensal baseado no periodo filtrado
+    consumo_mensal = {}
+    meses_periodo = []
+    mes_cursor = data_inicio_dias.replace(day=1)
+    while mes_cursor.date() <= data_fim.date():
+        meses_periodo.append((mes_cursor.year, mes_cursor.month))
+        if mes_cursor.month == 12:
+            mes_cursor = mes_cursor.replace(year=mes_cursor.year + 1, month=1)
+        else:
+            mes_cursor = mes_cursor.replace(month=mes_cursor.month + 1)
     
     # Consumo por hidrômetro (individual) no período
     consumo_por_hidrometro = []
@@ -1337,10 +1486,10 @@ def exportar_graficos_consumo_excel(request):
                 consumo_hidrometro_litros += consumo_litros
                 consumo_total_periodo += consumo_litros
                 
-                # Consumo diário
-                dia = leitura_atual.data_leitura.date()
-                if dia in consumo_diario:
-                    consumo_diario[dia] += consumo_litros
+                # Consumo mensal
+                mes_key = (leitura_atual.data_leitura.year, leitura_atual.data_leitura.month)
+                consumo_mensal.setdefault(mes_key, 0.0)
+                consumo_mensal[mes_key] += consumo_litros
 
         consumo_por_hidrometro.append({
             'hidrometro': hidrometro.numero,
@@ -1432,43 +1581,48 @@ def exportar_graficos_consumo_excel(request):
     ws_resumo.column_dimensions['A'].width = 30
     ws_resumo.column_dimensions['B'].width = 20
     
-    # Aba: Consumo Diário (baseado no período filtrado)
-    ws_diario = wb.create_sheet("Consumo Diário")
-    
-    ws_diario['A1'] = 'Data'
+    # Aba: Consumo Mensal (baseado no periodo filtrado)
+    ws_diario = wb.create_sheet("Consumo Mensal")
+
+    ws_diario['A1'] = 'Mes'
     ws_diario['B1'] = 'Consumo (L)'
     ws_diario['A1'].font = Font(bold=True)
     ws_diario['B1'].font = Font(bold=True)
-    
-    for idx, data in enumerate(datas_periodo, start=2):
-        ws_diario[f'A{idx}'] = data.strftime('%d/%m/%Y')
-        ws_diario[f'B{idx}'] = round(consumo_diario[data], 2)
-    
-    # Gerar gráfico com matplotlib (igual ao PDF)
+
+    nomes_meses = [
+        'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+        'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'
+    ]
+
+    for idx, (ano, mes) in enumerate(meses_periodo, start=2):
+        ws_diario[f'A{idx}'] = f"{nomes_meses[mes - 1]}/{str(ano)[-2:]}"
+        ws_diario[f'B{idx}'] = round(consumo_mensal.get((ano, mes), 0.0), 2)
+
+    # Gerar grafico com matplotlib (igual ao PDF)
     plt.figure(figsize=(12, 6))
-    datas_labels = [d.strftime('%d/%m') for d in datas_periodo]
-    valores_diarios = [consumo_diario[d] for d in datas_periodo]
-    plt.plot(datas_labels, valores_diarios, marker='o', color='#3498db', linewidth=2, markersize=4)
-    plt.title(f'Consumo Diário - {periodo_label}', fontsize=14, fontweight='bold')
-    plt.xlabel('Data', fontsize=11)
+    meses_labels = [f"{nomes_meses[mes - 1]}/{str(ano)[-2:]}" for ano, mes in meses_periodo]
+    valores_mensais = [round(consumo_mensal.get((ano, mes), 0.0), 2) for ano, mes in meses_periodo]
+    plt.bar(meses_labels, valores_mensais, color='#3498db', alpha=0.8)
+    plt.title(f'Consumo Mensal - {periodo_label}', fontsize=14, fontweight='bold')
+    plt.xlabel('Mes', fontsize=11)
     plt.ylabel('Consumo (L)', fontsize=11)
     plt.xticks(rotation=45, ha='right')
     plt.grid(axis='y', alpha=0.3)
     plt.tight_layout()
-    
-    # Salvar gráfico em buffer
+
+    # Salvar grafico em buffer
     img_buffer_diario = io.BytesIO()
     plt.savefig(img_buffer_diario, format='png', dpi=100, bbox_inches='tight')
     img_buffer_diario.seek(0)
     plt.close()
-    
+
     # Adicionar imagem ao Excel
     from openpyxl.drawing.image import Image as XLImage
     img_diario = XLImage(img_buffer_diario)
     img_diario.width = 600
     img_diario.height = 300
     ws_diario.add_image(img_diario, "D2")
-    
+
     ws_diario.column_dimensions['A'].width = 15
     ws_diario.column_dimensions['B'].width = 15
     
@@ -1586,13 +1740,19 @@ def exportar_graficos_lote_pdf(request, lote_id):
     # Obter dados do lote (mesma lógica da view graficos_lote)
     agora = timezone.localtime(timezone.now())
     hoje = agora.date()
-    periodo = request.GET.get('periodo', '30dias')
+    periodo = request.GET.get('periodo', '12meses')
     data_inicio_str = request.GET.get('data_inicio', '')
     data_fim_str = request.GET.get('data_fim', '')
     data_fim = hoje
     periodo_label = ''
 
-    if periodo == '7dias':
+    if periodo == '6meses':
+        data_inicio = _inicio_periodo_meses_date(hoje, 6)
+        periodo_label = 'Ultimos 6 meses'
+    elif periodo == '12meses':
+        data_inicio = _inicio_periodo_meses_date(hoje, 12)
+        periodo_label = 'Ultimos 12 meses'
+    elif periodo == '7dias':
         data_inicio = hoje - timedelta(days=7)
         periodo_label = 'Últimos 7 dias'
     elif periodo == '15dias':
@@ -1615,13 +1775,13 @@ def exportar_graficos_lote_pdf(request, lote_id):
                 data_fim = hoje
             periodo_label = f'{data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}'
         except (ValueError, TypeError):
-            data_inicio = hoje - timedelta(days=30)
+            data_inicio = _inicio_periodo_meses_date(hoje, 12)
             data_fim = hoje
-            periodo_label = 'Últimos 30 dias'
-            periodo = '30dias'
+            periodo_label = 'Ultimos 12 meses'
+            periodo = '12meses'
     else:
-        data_inicio = hoje - timedelta(days=30)
-        periodo_label = 'Últimos 30 dias'
+        data_inicio = _inicio_periodo_meses_date(hoje, 12)
+        periodo_label = 'Ultimos 12 meses'
     
     hidrometros = lote.hidrometros.filter(ativo=True)
     
@@ -1634,7 +1794,6 @@ def exportar_graficos_lote_pdf(request, lote_id):
         'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
     ]
     consumo_total_periodo = 0.0
-    consumo_por_dia = {}
     consumo_por_mes = {}
 
     for hidrometro in hidrometros:
@@ -1653,18 +1812,8 @@ def exportar_graficos_lote_pdf(request, lote_id):
             consumo_litros = diferenca * 1000
             consumo_total_periodo += consumo_litros
 
-            dia = leitura_atual.data_leitura.date()
-            consumo_por_dia[dia] = consumo_por_dia.get(dia, 0.0) + consumo_litros
-
             mes_key = (leitura_atual.data_leitura.year, leitura_atual.data_leitura.month)
             consumo_por_mes[mes_key] = consumo_por_mes.get(mes_key, 0.0) + consumo_litros
-
-    datas_periodo = []
-    dia_cursor = data_inicio
-    while dia_cursor <= data_fim:
-        datas_periodo.append(dia_cursor)
-        consumo_por_dia.setdefault(dia_cursor, 0.0)
-        dia_cursor += timedelta(days=1)
 
     meses_periodo = []
     mes_cursor = data_inicio.replace(day=1)
@@ -1899,13 +2048,19 @@ def exportar_graficos_lote_excel(request, lote_id):
     # Obter dados do lote (mesma lógica da view graficos_lote)
     agora = timezone.localtime(timezone.now())
     hoje = agora.date()
-    periodo = request.GET.get('periodo', '30dias')
+    periodo = request.GET.get('periodo', '12meses')
     data_inicio_str = request.GET.get('data_inicio', '')
     data_fim_str = request.GET.get('data_fim', '')
     data_fim = hoje
     periodo_label = ''
 
-    if periodo == '7dias':
+    if periodo == '6meses':
+        data_inicio = _inicio_periodo_meses_date(hoje, 6)
+        periodo_label = 'Ultimos 6 meses'
+    elif periodo == '12meses':
+        data_inicio = _inicio_periodo_meses_date(hoje, 12)
+        periodo_label = 'Ultimos 12 meses'
+    elif periodo == '7dias':
         data_inicio = hoje - timedelta(days=7)
         periodo_label = 'Últimos 7 dias'
     elif periodo == '15dias':
@@ -1928,13 +2083,13 @@ def exportar_graficos_lote_excel(request, lote_id):
                 data_fim = hoje
             periodo_label = f'{data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}'
         except (ValueError, TypeError):
-            data_inicio = hoje - timedelta(days=30)
+            data_inicio = _inicio_periodo_meses_date(hoje, 12)
             data_fim = hoje
-            periodo_label = 'Últimos 30 dias'
-            periodo = '30dias'
+            periodo_label = 'Ultimos 12 meses'
+            periodo = '12meses'
     else:
-        data_inicio = hoje - timedelta(days=30)
-        periodo_label = 'Últimos 30 dias'
+        data_inicio = _inicio_periodo_meses_date(hoje, 12)
+        periodo_label = 'Ultimos 12 meses'
     
     hidrometros = lote.hidrometros.filter(ativo=True)
     
@@ -1947,7 +2102,6 @@ def exportar_graficos_lote_excel(request, lote_id):
         'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
     ]
     consumo_total_periodo = 0.0
-    consumo_por_dia = {}
     consumo_por_mes = {}
 
     for hidrometro in hidrometros:
@@ -1966,18 +2120,8 @@ def exportar_graficos_lote_excel(request, lote_id):
             consumo_litros = diferenca * 1000
             consumo_total_periodo += consumo_litros
 
-            dia = leitura_atual.data_leitura.date()
-            consumo_por_dia[dia] = consumo_por_dia.get(dia, 0.0) + consumo_litros
-
             mes_key = (leitura_atual.data_leitura.year, leitura_atual.data_leitura.month)
             consumo_por_mes[mes_key] = consumo_por_mes.get(mes_key, 0.0) + consumo_litros
-
-    datas_periodo = []
-    dia_cursor = data_inicio
-    while dia_cursor <= data_fim:
-        datas_periodo.append(dia_cursor)
-        consumo_por_dia.setdefault(dia_cursor, 0.0)
-        dia_cursor += timedelta(days=1)
 
     meses_periodo = []
     mes_cursor = data_inicio.replace(day=1)
@@ -2071,45 +2215,6 @@ def exportar_graficos_lote_excel(request, lote_id):
     ws_mensal.column_dimensions['A'].width = 15
     ws_mensal.column_dimensions['B'].width = 15
     
-    # Aba: Consumo Diário
-    ws_diario_lote = wb.create_sheet("Consumo Diário")
-    
-    ws_diario_lote['A1'] = 'Dia'
-    ws_diario_lote['B1'] = 'Consumo (L)'
-    ws_diario_lote['A1'].font = Font(bold=True)
-    ws_diario_lote['B1'].font = Font(bold=True)
-    
-    for idx, dia in enumerate(datas_periodo, start=2):
-        ws_diario_lote[f'A{idx}'] = dia.strftime('%d/%m/%Y')
-        ws_diario_lote[f'B{idx}'] = round(consumo_por_dia.get(dia, 0.0), 2)
-    
-    # Gerar gráfico com matplotlib (igual ao PDF)
-    plt.figure(figsize=(12, 6))
-    dias_labels = [d.strftime('%d/%m') for d in datas_periodo]
-    valores_diarios_lote = [consumo_por_dia.get(d, 0.0) for d in datas_periodo]
-    plt.plot(dias_labels, valores_diarios_lote, marker='o', color='#3498db', linewidth=2, markersize=4)
-    plt.title(f'Consumo Diário - Lote {lote.numero} ({periodo_label})', fontsize=14, fontweight='bold')
-    plt.xlabel('Dia', fontsize=11)
-    plt.ylabel('Consumo (L)', fontsize=11)
-    plt.xticks(rotation=45, ha='right')
-    plt.grid(axis='y', alpha=0.3)
-    plt.tight_layout()
-    
-    # Salvar gráfico em buffer
-    img_buffer_diario_lote = io.BytesIO()
-    plt.savefig(img_buffer_diario_lote, format='png', dpi=100, bbox_inches='tight')
-    img_buffer_diario_lote.seek(0)
-    plt.close()
-    
-    # Adicionar imagem ao Excel
-    img_diario_lote = XLImage(img_buffer_diario_lote)
-    img_diario_lote.width = 600
-    img_diario_lote.height = 300
-    ws_diario_lote.add_image(img_diario_lote, "D2")
-    
-    ws_diario_lote.column_dimensions['A'].width = 15
-    ws_diario_lote.column_dimensions['B'].width = 15
-
     leituras_periodo = Leitura.objects.filter(
         hidrometro__lote=lote,
         data_leitura__date__gte=data_inicio,
