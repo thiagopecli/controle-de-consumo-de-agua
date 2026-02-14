@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Sistema de Controle de Consumo de Água{% endblock %}</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     {% block extra_css %}{% endblock %}
 </head>
@@ -12,10 +13,21 @@
     <nav class="navbar">
         <div class="container">
             <div class="nav-brand">
-                <h1>Controle de Consumo de Água - Cond. Pedra de Inoã</h1>
+                <h1>Controle de Consumo de Água</h1>
             </div>
-            <ul class="nav-menu">
-                <li><a href="{% url 'consumo:dashboard' %}" class="nav-link">Dashboard</a></li>
+            <button class="nav-toggle" type="button" aria-controls="primary-navigation" aria-expanded="false" aria-label="Abrir menu" data-open-text="Fechar" data-close-text="Menu">
+                <span class="nav-toggle-icon" aria-hidden="true">
+                    <span class="nav-toggle-line"></span>
+                    <span class="nav-toggle-line"></span>
+                    <span class="nav-toggle-line"></span>
+                </span>
+                <span class="nav-toggle-text">Menu</span>
+            </button>
+            <ul class="nav-menu" id="primary-navigation">
+                <li class="nav-close-item">
+                    <button class="nav-close" type="button" aria-label="Fechar menu">X</button>
+                </li>
+                <li><a href="{% url 'consumo:dashboard' %}" class="nav-link">Home</a></li>
                 <li><a href="{% url 'consumo:listar_hidrometros' %}" class="nav-link">Hidrômetros</a></li>
                 <li><a href="{% url 'consumo:listar_leituras' %}" class="nav-link">Leituras</a></li>
                 <li><a href="{% url 'consumo:registrar_leitura' %}" class="nav-link">Registrar Leitura</a></li>
@@ -33,7 +45,8 @@
 
     <footer class="footer">
         <div class="container">
-            <p>&copy; 2026 Condomínio Pedra de Inoã - Sistema de Controle de Consumo de Água</p>
+            <p>&copy; 2026 Condomínio Pedra de Inoã</p>
+            <p>Desenvolvido por <a href="https://www.linkedin.com/in/thiagodossantospereira/" target="_blank" rel="noopener">Thiago</a></p>
         </div>
     </footer>
 
