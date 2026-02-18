@@ -1,6 +1,6 @@
 from django.shortcuts import render, get_object_or_404
 from django.utils import timezone
-from django.db.models import Sum, Avg, Max, Min, Count, Q
+from django.db.models import Sum, Avg, Max, Min, Count, Q, Case, When, Value, IntegerField
 from django.http import HttpResponse
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
@@ -254,15 +254,34 @@ def listar_hidrometros(request):
     
     agora = timezone.localtime(timezone.now())
     hoje = agora.date()
+    
+    # Query base
     hidrometros_list = (
         Hidrometro.objects.filter(ativo=True)
         .select_related('lote')
         .annotate(
             leituras_hoje=Count('leituras', filter=Q(leituras__data_leitura__date=hoje)),
             ultima_leitura=Max('leituras__data_leitura'),
+            # Cria um campo de ordenação: administração = 0, residencial = 1
+            ordem_tipo=Case(
+                When(lote__tipo='administracao', then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField()
+            )
         )
-        .order_by('numero')
     )
+    
+    # Filtro de busca
+    search_query = request.GET.get('search', '').strip()
+    if search_query:
+        # Busca por número do hidrômetro OU número do lote
+        hidrometros_list = hidrometros_list.filter(
+            Q(numero__icontains=search_query) | 
+            Q(lote__numero__icontains=search_query)
+        )
+    
+    # Ordena: primeiro administração (ordem_tipo=0), depois residenciais (ordem_tipo=1), ambos por número crescente
+    hidrometros_list = hidrometros_list.order_by('ordem_tipo', 'numero')
     
     # Paginação: 50 hidrômetros por página
     paginator = Paginator(hidrometros_list, 50)
@@ -271,6 +290,7 @@ def listar_hidrometros(request):
     
     context = {
         'hidrometros': hidrometros,
+        'search_query': search_query,
     }
     
     return render(request, 'consumo/listar_hidrometros.html', context)
@@ -280,23 +300,23 @@ def listar_leituras(request):
     """Lista todas as leituras com paginação"""
     from django.core.paginator import Paginator
     
+    # Query base
     leituras_list = (
         Leitura.objects.all()
         .select_related('hidrometro__lote')
         .order_by('-data_leitura')
     )
 
-    # Filtro por lote (servidor): ainda paginando em 50 por página
-    lote_filtro = request.GET.get('lote', '').strip()
-    if lote_filtro:
-        if lote_filtro.lower() == 'adm':
-            # Filtrar todos os lotes de administração
-            leituras_list = leituras_list.filter(hidrometro__lote__tipo='administracao')
-        else:
-            # Filtro por número de lote específico (inclui possíveis valores como 'ADM-22')
-            leituras_list = leituras_list.filter(hidrometro__lote__numero=lote_filtro)
+    # Filtro de busca
+    search_query = request.GET.get('search', '').strip()
+    if search_query:
+        # Busca por número do hidrômetro OU número do lote
+        leituras_list = leituras_list.filter(
+            Q(hidrometro__numero__icontains=search_query) | 
+            Q(hidrometro__lote__numero__icontains=search_query)
+        )
 
-    # Paginação: 50 leituras por página (sempre)
+    # Paginação: 50 leituras por página
     paginator = Paginator(leituras_list, 50)
     page_number = request.GET.get('page', 1)
     leituras = paginator.get_page(page_number)
@@ -305,7 +325,7 @@ def listar_leituras(request):
     context = {
         'leituras': leituras,
         'total_leituras': total_leituras,
-        'lote_filtro': lote_filtro,
+        'search_query': search_query,
     }
     
     return render(request, 'consumo/listar_leituras.html', context)
