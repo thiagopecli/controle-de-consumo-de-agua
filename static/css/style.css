@@ -595,8 +595,16 @@ body {
     margin-bottom: 2rem;
 }
 
+.search-form {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
 .search-input {
-    width: 100%;
+    flex: 1;
+    min-width: 300px;
     max-width: 500px;
     padding: 0.9rem 1.2rem;
     border: 2px solid var(--border-color);
