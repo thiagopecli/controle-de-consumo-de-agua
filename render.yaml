@@ -8,6 +8,10 @@ services:
     name: controle-agua
     env: python
     plan: free
+    disks:
+      - name: media
+        mountPath: /var/data
+        sizeGB: 1
     buildCommand: "pip install -r requirements.txt; python manage.py collectstatic --noinput; python manage.py migrate; python manage.py create_superuser_if_missing"
     startCommand: "gunicorn hidrometro_project.wsgi:application"
     envVars:
@@ -27,6 +31,8 @@ services:
         value: "60"
       - key: SESSION_COOKIE_SECURE
         value: "True"
+      - key: MEDIA_ROOT
+        value: /var/data/media
       - key: DATABASE_URL
         fromDatabase:
           name: controle-agua-db
