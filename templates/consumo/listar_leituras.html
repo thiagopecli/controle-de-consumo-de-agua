@@ -10,10 +10,12 @@
     <div class="search-box">
         <form method="get" action="{% url 'consumo:listar_leituras' %}" class="search-form">
             <input type="text" name="search" id="searchInput" placeholder="Buscar por número do hidrômetro ou lote..." class="search-input" value="{{ search_query }}">
-            <button type="submit" class="btn btn-primary" style="margin-left: 10px;">🔍 Buscar</button>
-            {% if search_query %}
-            <a href="{% url 'consumo:listar_leituras' %}" class="btn btn-secondary" style="margin-left: 10px;">✖ Limpar</a>
-            {% endif %}
+            <div class="search-actions">
+                <button type="submit" class="btn btn-primary">🔍 Buscar</button>
+                {% if search_query %}
+                <a href="{% url 'consumo:listar_leituras' %}" class="btn btn-secondary">✖ Limpar</a>
+                {% endif %}
+            </div>
         </form>
     </div>
     
@@ -82,13 +84,13 @@
     
     <!-- Paginação -->
     {% if leituras.has_other_pages %}
-    <div style="margin-top: 2rem; display: flex; justify-content: center; align-items: center; gap: 1rem;">
+    <div class="pagination-bar">
         {% if leituras.has_previous %}
             <a href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary">« Primeira</a>
             <a href="?page={{ leituras.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary">‹ Anterior</a>
         {% endif %}
         
-        <span style="padding: 0.5rem 1rem; background: white; border-radius: 5px; font-weight: 600;">
+        <span class="pagination-status">
             Página {{ leituras.number }} de {{ leituras.paginator.num_pages }}
         </span>
         

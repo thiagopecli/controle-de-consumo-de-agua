@@ -6,14 +6,14 @@
 
 {% block content %}
 <div class="detalhes-hidrometro-page">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <div class="page-header">
         <div>
             <h2>📊 Hidrômetro {{ hidrometro.numero }} - Lote {{ hidrometro.lote.numero }}</h2>
             <p style="color: var(--secondary-color); margin-top: 0.5rem;" id="periodo-label">
                 Detalhes, gráficos e histórico de leituras
             </p>
         </div>
-        <div>
+        <div class="page-actions">
             <a href="{% url 'consumo:listar_hidrometros' %}" class="btn btn-secondary">
                 ← Voltar para Lista
             </a>

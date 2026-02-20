@@ -41,6 +41,12 @@ body {
     padding: 0 20px;
 }
 
+img,
+canvas {
+    max-width: 100%;
+    height: auto;
+}
+
 /* Navbar */
 .navbar {
     background: linear-gradient(135deg, #0891b2 0%, #06b6d4 50%, #22d3ee 100%);
@@ -602,6 +608,12 @@ body {
     flex-wrap: wrap;
 }
 
+.search-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
 .search-input {
     flex: 1;
     min-width: 300px;
@@ -612,6 +624,23 @@ body {
     font-size: 1rem;
     transition: all 0.3s ease;
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.pagination-bar {
+    margin-top: 2rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.pagination-status {
+    padding: 0.5rem 1rem;
+    background: white;
+    border-radius: 8px;
+    font-weight: 600;
+    text-align: center;
 }
 
 .search-input:focus {
@@ -671,6 +700,10 @@ body {
 
 .chart-container canvas {
     max-height: 300px;
+}
+
+.charts-container {
+    width: 100%;
 }
 
 /* Filters */
@@ -859,6 +892,38 @@ body {
     .page-actions .btn {
         width: 100%;
     }
+
+    .search-form {
+        align-items: stretch;
+    }
+
+    .search-input {
+        min-width: 0;
+        max-width: none;
+        width: 100%;
+    }
+
+    .search-actions {
+        width: 100%;
+    }
+
+    .search-actions .btn {
+        flex: 1 1 140px;
+    }
+
+    .pagination-bar {
+        align-items: stretch;
+        gap: 0.6rem;
+    }
+
+    .pagination-bar .btn,
+    .pagination-status {
+        width: 100%;
+    }
+
+    .page-actions .btn {
+        width: 100%;
+    }
     
     h2 {
         font-size: 1.5rem !important;
@@ -891,6 +956,24 @@ body {
     
     .charts-grid {
         grid-template-columns: 1fr;
+    }
+
+    .charts-container {
+        grid-template-columns: 1fr !important;
+        gap: 1rem !important;
+    }
+
+    .chart-container {
+        padding: 1rem !important;
+    }
+
+    #filtro-periodo-form > div {
+        grid-template-columns: 1fr !important;
+    }
+
+    #periodo-personalizado-fields {
+        grid-template-columns: 1fr !important;
+        grid-column: auto !important;
     }
     
     .form-row {
@@ -961,5 +1044,13 @@ body {
         display: block;
         width: 100%;
         margin-bottom: 0.3rem;
+    }
+
+    .form-actions {
+        flex-direction: column;
+    }
+
+    .form-actions .btn {
+        width: 100%;
     }
 }
