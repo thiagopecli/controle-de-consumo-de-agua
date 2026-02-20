@@ -44,6 +44,33 @@ class HtmlViewsSmokeTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn('hidrometros', resp.context)
 
+    def test_registrar_leitura_ordena_adm_primeiro_e_residenciais_por_lote(self):
+        data_instalacao = self.agora.date()
+
+        lote_adm = Lote.objects.create(numero='ADM-01', tipo='administracao')
+        lote_adm_2 = Lote.objects.create(numero='ADM-02', tipo='administracao')
+        lote_2 = Lote.objects.create(numero='2', tipo='residencial')
+        lote_10 = Lote.objects.create(numero='10', tipo='residencial')
+
+        hidrometro_adm_10 = Hidrometro.objects.create(numero='ADM10', lote=lote_adm, ativo=True, data_instalacao=data_instalacao)
+        hidrometro_adm_2 = Hidrometro.objects.create(numero='ADM2', lote=lote_adm_2, ativo=True, data_instalacao=data_instalacao)
+        hidrometro_2 = Hidrometro.objects.create(numero='H002', lote=lote_2, ativo=True, data_instalacao=data_instalacao)
+        hidrometro_10 = Hidrometro.objects.create(numero='H010', lote=lote_10, ativo=True, data_instalacao=data_instalacao)
+
+        resp = self.client.get(reverse('consumo:registrar_leitura'))
+        self.assertEqual(resp.status_code, 200)
+
+        hidrometros = list(resp.context['hidrometros'])
+        numeros = [hidrometro.numero for hidrometro in hidrometros]
+
+        self.assertEqual(numeros, [
+            hidrometro_adm_2.numero,
+            hidrometro_adm_10.numero,
+            hidrometro_2.numero,
+            hidrometro_10.numero,
+            self.h.numero,
+        ])
+
     def test_graficos_consumo_route(self):
         resp = self.client.get(reverse('consumo:graficos_consumo'))
         self.assertEqual(resp.status_code, 200)
