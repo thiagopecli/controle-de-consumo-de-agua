@@ -333,7 +333,20 @@ def listar_leituras(request):
 
 def registrar_leitura(request):
     """Formulário para registrar leituras"""
-    hidrometros = Hidrometro.objects.filter(ativo=True).select_related('lote')
+    hidrometros_queryset = Hidrometro.objects.filter(ativo=True).select_related('lote')
+
+    def chave_natural(texto):
+        import re
+        partes = re.split(r'(\d+)', (texto or '').strip().lower())
+        return [int(parte) if parte.isdigit() else parte for parte in partes]
+
+    def chave_ordenacao_hidrometro(hidrometro):
+        tipo_prioridade = 0 if hidrometro.lote.tipo == 'administracao' else 1
+        if tipo_prioridade == 0:
+            return (tipo_prioridade, chave_natural(hidrometro.numero), chave_natural(hidrometro.lote.numero))
+        return (tipo_prioridade, chave_natural(hidrometro.lote.numero), chave_natural(hidrometro.numero))
+
+    hidrometros = sorted(hidrometros_queryset, key=chave_ordenacao_hidrometro)
     
     context = {
         'hidrometros': hidrometros,
