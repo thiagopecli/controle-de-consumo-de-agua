@@ -4,9 +4,9 @@ from .models import Lote, Hidrometro, Leitura
 
 @admin.register(Lote)
 class LoteAdmin(admin.ModelAdmin):
-    list_display = ['numero', 'tipo', 'endereco', 'ativo', 'criado_em']
+    list_display = ['numero', 'tipo', 'proprietario_nome', 'telefone_whatsapp', 'endereco', 'ativo', 'criado_em']
     list_filter = ['tipo', 'ativo']
-    search_fields = ['numero', 'endereco']
+    search_fields = ['numero', 'proprietario_nome', 'telefone_whatsapp', 'endereco']
     ordering = ['numero']
 
 
