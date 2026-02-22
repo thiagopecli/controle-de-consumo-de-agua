@@ -1105,6 +1105,8 @@ def exportar_graficos_consumo_pdf(request):
     )
     
     # Criar PDF
+    img_buffer = None
+    img_buffer_top = None
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(A4),
                           rightMargin=30, leftMargin=30,
@@ -1297,6 +1299,11 @@ def exportar_graficos_consumo_pdf(request):
     buffer.seek(0)
     response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="relatorio_consumo_condominio_{agora.strftime("%Y%m%d")}.pdf"'
+    buffer.close()
+    if img_buffer is not None:
+        img_buffer.close()
+    if img_buffer_top is not None:
+        img_buffer_top.close()
     
     return response
 
