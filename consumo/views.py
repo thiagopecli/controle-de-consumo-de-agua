@@ -1272,7 +1272,11 @@ def exportar_graficos_consumo_pdf(request):
 
 
 def baixar_relatorios_lotes_periodo_zip(request):
-    """Gera e baixa automaticamente todos os relatórios individuais de lotes em um único ZIP."""
+    """Gera e baixa relatórios individuais de lotes em um único ZIP.
+    
+    Suporta paginação por faixa de lotes (ex: lote_inicio=1, lote_fim=50)
+    para evitar timeout do servidor ao processar todos os 310 lotes.
+    """
     from django.test import RequestFactory
     
     agora = timezone.localtime(timezone.now())
@@ -1333,15 +1337,40 @@ def baixar_relatorios_lotes_periodo_zip(request):
     data_fim = data_fim_dt.date()
     intervalo_token = f"{data_inicio.strftime('%Y%m%d')}_{data_fim.strftime('%Y%m%d')}"
 
+    # Paginação por faixa de lotes (para evitar timeout)
+    lote_inicio = request.GET.get('lote_inicio')
+    lote_fim = request.GET.get('lote_fim')
+    
     # Buscar apenas lotes que têm leituras no período (otimização crítica)
-    lotes_com_leituras = Lote.objects.filter(
+    query = Lote.objects.filter(
         tipo='residencial',
         hidrometros__ativo=True,
         hidrometros__leituras__data_leitura__date__gte=data_inicio,
         hidrometros__leituras__data_leitura__date__lte=data_fim
-    ).distinct().order_by('numero')
+    ).distinct()
+    
+    # Aplicar filtro de faixa se fornecido
+    if lote_inicio and lote_fim:
+        try:
+            # Converter números dos lotes para inteiros e filtrar
+            inicio_num = int(lote_inicio)
+            fim_num = int(lote_fim)
+            # Filtrar lotes cujo número está na faixa (especificando a tabela)
+            query = query.extra(
+                where=["CAST(consumo_lote.numero AS INTEGER) >= %s AND CAST(consumo_lote.numero AS INTEGER) <= %s"],
+                params=[inicio_num, fim_num]
+            )
+            faixa_label = f"_lotes_{inicio_num}_a_{fim_num}"
+        except (ValueError, TypeError):
+            faixa_label = ""
+    else:
+        faixa_label = "_todos"
+    
+    # Executar query e ordenar (resolver ambiguidade de 'numero')
+    lotes_com_leituras = list(query)
+    lotes_com_leituras.sort(key=lambda lote: int(lote.numero) if lote.numero.isdigit() else 0)
 
-    if not lotes_com_leituras.exists():
+    if not lotes_com_leituras:
         return HttpResponse(
             f'Nenhum lote residencial com leituras encontrado para o período de '
             f'{data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}.',
@@ -1393,7 +1422,7 @@ def baixar_relatorios_lotes_periodo_zip(request):
     buffer.seek(0)
     response = HttpResponse(buffer.getvalue(), content_type='application/zip')
     response['Content-Disposition'] = (
-        f'attachment; filename="relatorios_lotes_{intervalo_token}_{total_pdfs_gerados}_lotes.zip"'
+        f'attachment; filename="relatorios_{intervalo_token}{faixa_label}_{total_pdfs_gerados}_pdfs.zip"'
     )
     return response
 
@@ -1909,8 +1938,8 @@ def exportar_graficos_lote_pdf(request, lote_id):
     elements.append(mensal_table)
     elements.append(Spacer(1, 0.3*inch))
     
-    # Gráfico de Consumo Mensal
-    plt.figure(figsize=(10, 5))
+    # Gráfico de Consumo Mensal (otimizado para performance)
+    fig = plt.figure(figsize=(10, 5))
     meses_labels = [f'{nomes_meses[mes - 1]}/{str(ano)[-2:]}' for (ano, mes) in meses_periodo]
     valores_mensais = [consumo_por_mes.get((ano, mes), 0.0) for (ano, mes) in meses_periodo]
     plt.bar(meses_labels, valores_mensais, color='#27ae60', alpha=0.7)
@@ -1921,11 +1950,12 @@ def exportar_graficos_lote_pdf(request, lote_id):
     plt.grid(axis='y', alpha=0.3)
     plt.tight_layout()
     
-    # Salvar gráfico em buffer
+    # Salvar gráfico em buffer (DPI reduzido para performance em batch)
     img_buffer = io.BytesIO()
-    plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight')
+    plt.savefig(img_buffer, format='png', dpi=100, bbox_inches='tight',
+                pil_kwargs={'compress_level': 1})  # Compressão rápida
     img_buffer.seek(0)
-    plt.close()
+    plt.close(fig)  # Fechar figura explicitamente
     
     # Adicionar imagem ao PDF
     img = Image(img_buffer, width=7*inch, height=3.5*inch)
