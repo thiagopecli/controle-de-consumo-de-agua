@@ -39,10 +39,9 @@
                         Período:
                     </label>
                     <select name="periodo" id="periodo" class="form-control" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;">
-                        <option value="30dias" {% if dados_graficos.periodo_selecionado == '30dias' %}selected{% endif %}>Últimos 30 dias</option>
-                        <option value="60dias" {% if dados_graficos.periodo_selecionado == '60dias' %}selected{% endif %}>Últimos 60 dias</option>
-                        <option value="90dias" {% if dados_graficos.periodo_selecionado == '90dias' %}selected{% endif %}>Últimos 90 dias</option>
-                        <option value="mes_atual" {% if dados_graficos.periodo_selecionado == 'mes_atual' %}selected{% endif %}>Mês Atual</option>
+                        <option value="mes_atual" {% if dados_graficos.periodo_selecionado == 'mes_atual' %}selected{% endif %}>Mês Atual (Última Coleta)</option>
+                        <option value="2meses" {% if dados_graficos.periodo_selecionado == '2meses' %}selected{% endif %}>Últimos 2 meses</option>
+                        <option value="3meses" {% if dados_graficos.periodo_selecionado == '3meses' %}selected{% endif %}>Últimos 3 meses</option>
                         <option value="ano_atual" {% if dados_graficos.periodo_selecionado == 'ano_atual' %}selected{% endif %}>Ano Atual</option>
                         <option value="personalizado" {% if dados_graficos.periodo_selecionado == 'personalizado' %}selected{% endif %}>Período Personalizado</option>
                     </select>
@@ -102,26 +101,15 @@
 
     <!-- Container dos Gráficos -->
     <div class="charts-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(700px, 1fr)); gap: 2rem; margin-bottom: 3rem;">
-        
-        <!-- Gráfico 1: Consumo por Dia do Mês -->
-        <div class="chart-container" style="padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: white;">
-            <h3 style="color: var(--dark-text); margin-bottom: 1.5rem; font-size: 1.2rem;">
-                📅 Consumo por Dia do Mês (Litros)
-            </h3>
-            <canvas id="chartConsumoPorDia"></canvas>
-            <p style="font-size: 0.85rem; color: var(--secondary-color); margin-top: 1rem; text-align: center;">
-                Exibindo o consumo total dos hidrômetros residenciais por dia
-            </p>
-        </div>
 
-        <!-- Gráfico 2: Consumo por Mês do Ano -->
+        <!-- Gráfico 1: Consumo por Mês do Ano -->
         <div class="chart-container" style="padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: white;">
             <h3 style="color: var(--dark-text); margin-bottom: 1.5rem; font-size: 1.2rem;">
                 📊 Consumo por Mês do Ano (Litros)
             </h3>
             <canvas id="chartConsumoMes"></canvas>
             <p style="font-size: 0.85rem; color: var(--secondary-color); margin-top: 1rem; text-align: center;">
-                Visualização do consumo agregado por mês dentro do período selecionado (Total: <strong>{{ dados_graficos.consumo_total_ano|floatformat:0|formatar_litros }} L</strong>)
+                Visualização do consumo agregado de janeiro a dezembro do ano atual (meses sem consumo aparecem com 0) (Total: <strong>{{ dados_graficos.consumo_total_ano|floatformat:0|formatar_litros }} L</strong>)
             </p>
         </div>
     </div>
@@ -198,77 +186,7 @@ document.addEventListener('DOMContentLoaded', function() {
         roxo: 'rgba(168, 85, 247, 1)',
     };
 
-    // ============ GRÁFICO 1: CONSUMO POR DIA DO MÊS ============
-    const ctxDia = document.getElementById('chartConsumoPorDia');
-    if (ctxDia && dadosGraficos.consumo_por_dia.length > 0) {
-        const diasLabels = dadosGraficos.consumo_por_dia.map(d => d.label || `Dia ${d.dia}`);
-        const consumoDados = dadosGraficos.consumo_por_dia.map(d => d.consumo_litros);
-
-        new Chart(ctxDia, {
-            type: 'bar',
-            data: {
-                labels: diasLabels,
-                datasets: [{
-                    label: 'Consumo (Litros)',
-                    data: consumoDados,
-                    backgroundColor: cores.azul,
-                    borderColor: 'rgba(8, 145, 178, 0.8)',
-                    borderWidth: 1,
-                    borderRadius: 4,
-                    maxBarThickness: 36,
-                    barPercentage: 0.8,
-                    categoryPercentage: 0.8,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'top',
-                        labels: {
-                            font: { size: 12 },
-                            padding: 15,
-                        }
-                    },
-                    tooltip: {
-                        backgroundColor: 'rgba(0,0,0,0.7)',
-                        padding: 12,
-                        titleFont: { size: 13 },
-                        bodyFont: { size: 12 },
-                        callbacks: {
-                            label: function(context) {
-                                return `${context.parsed.y.toLocaleString('pt-BR', {maximumFractionDigits: 0})} L`;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            callback: function(value) {
-                                return value.toLocaleString('pt-BR') + ' L';
-                            },
-                            font: { size: 11 }
-                        },
-                        title: {
-                            display: true,
-                            text: 'Litros'
-                        }
-                    },
-                    x: {
-                        ticks: {
-                            font: { size: 10 }
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    // ============ GRÁFICO 2: CONSUMO POR MÊS DO ANO ============
+    // ============ GRÁFICO 1: CONSUMO POR MÊS DO ANO ============
     const ctxMes = document.getElementById('chartConsumoMes');
     if (ctxMes && dadosGraficos.consumo_mes.length > 0) {
         const diasMesLabels = dadosGraficos.consumo_mes.map(d => d.mes_nome || `Mês ${d.mes}`);
