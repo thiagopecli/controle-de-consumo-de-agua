@@ -1393,7 +1393,10 @@ def baixar_relatorios_lotes_periodo_zip(request):
                     'data_fim': data_fim.strftime('%Y-%m-%d')
                 }
             )
+            # Copiar configurações importantes da requisição original
             fake_request.user = request.user
+            fake_request.META = request.META.copy()
+            fake_request.session = request.session
             
             try:
                 # Gerar PDF do lote
@@ -2021,17 +2024,60 @@ def exportar_graficos_lote_pdf(request, lote_id):
         elements.append(PageBreak())
         elements.append(Paragraph("📷 Fotos das Leituras", heading_style))
         for leitura in leituras_com_foto:
-            foto_path = getattr(leitura.foto, 'path', '')
-            if not foto_path or not os.path.exists(foto_path):
+            try:
+                # Verificar se a foto existe e é acessível
+                if not leitura.foto:
+                    continue
+                    
+                # Tentar obter o caminho absoluto da foto
+                foto_path = None
+                if hasattr(leitura.foto, 'path'):
+                    foto_path = leitura.foto.path
+                    # Garantir caminho absoluto
+                    if not os.path.isabs(foto_path):
+                        foto_path = os.path.join(settings.MEDIA_ROOT, foto_path)
+                elif hasattr(leitura.foto, 'file'):
+                    foto_file = leitura.foto.file.name
+                    if not os.path.isabs(foto_file):
+                        foto_path = os.path.join(settings.MEDIA_ROOT, foto_file)
+                    else:
+                        foto_path = foto_file
+                        
+                # Se não conseguiu o caminho ou arquivo não existe, pular
+                if not foto_path:
+                    continue
+                    
+                # Verificar se arquivo existe
+                if not os.path.exists(foto_path):
+                    # Tentar caminho alternativo
+                    alt_path = os.path.join(settings.MEDIA_ROOT, str(leitura.foto))
+                    if os.path.exists(alt_path):
+                        foto_path = alt_path
+                    else:
+                        continue
+                    
+                legenda = (
+                    f"Hidrômetro {leitura.hidrometro.numero} - "
+                    f"{leitura.data_leitura.strftime('%d/%m/%Y %H:%M')}"
+                )
+                elements.append(Paragraph(legenda, styles['Normal']))
+                elements.append(Spacer(1, 0.1*inch))
+                
+                # Adicionar foto com tratamento de erro
+                try:
+                    img_foto = Image(foto_path, width=6.5*inch, height=3.8*inch)
+                    elements.append(img_foto)
+                except Exception as img_error:
+                    # Se falhar ao carregar imagem, adicionar nota
+                    elements.append(Paragraph(
+                        f"[Foto não disponível: {str(img_error)[:50]}]",
+                        styles['Normal']
+                    ))
+                    
+                elements.append(Spacer(1, 0.2*inch))
+            except Exception as e:
+                # Continuar com próxima foto se houver erro
                 continue
-            legenda = (
-                f"Hidrômetro {leitura.hidrometro.numero} - "
-                f"{leitura.data_leitura.strftime('%d/%m/%Y %H:%M')}"
-            )
-            elements.append(Paragraph(legenda, styles['Normal']))
-            elements.append(Spacer(1, 0.1*inch))
-            elements.append(Image(foto_path, width=6.5*inch, height=3.8*inch))
-            elements.append(Spacer(1, 0.2*inch))
     
     
     # Construir PDF
