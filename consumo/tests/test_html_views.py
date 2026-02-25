@@ -1,6 +1,14 @@
+import io
+import os
+import tempfile
+import zipfile
+from datetime import datetime
+
 from django.test import TestCase
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
+from django.core.files.uploadedfile import SimpleUploadedFile
 
 from consumo.models import Lote, Hidrometro, Leitura
 
@@ -80,3 +88,45 @@ class HtmlViewsSmokeTests(TestCase):
         resp = self.client.get(reverse('consumo:graficos_lote', args=[self.lote.id]))
         self.assertEqual(resp.status_code, 200)
         self.assertIn('dados_graficos', resp.context)
+
+    def test_download_zip_relatorios_lotes_com_fotos(self):
+        with tempfile.TemporaryDirectory() as base_dir_temp, tempfile.TemporaryDirectory() as media_dir_temp:
+            pasta_relatorios = os.path.join(base_dir_temp, 'relatorios_lotes_20260115_20260215')
+            os.makedirs(pasta_relatorios, exist_ok=True)
+
+            caminho_relatorio = os.path.join(pasta_relatorios, 'relatorio_lote_701_20260115_20260215.pdf')
+            with open(caminho_relatorio, 'wb') as arquivo_relatorio:
+                arquivo_relatorio.write(b'%PDF-1.4 arquivo de teste')
+
+            with override_settings(BASE_DIR=base_dir_temp, MEDIA_ROOT=media_dir_temp):
+                foto_teste = SimpleUploadedFile(
+                    'foto_teste.jpg',
+                    b'conteudo-foto-teste',
+                    content_type='image/jpeg'
+                )
+                Leitura.objects.create(
+                    hidrometro=self.h,
+                    leitura=2,
+                    periodo='tarde',
+                    data_leitura=timezone.make_aware(datetime(2026, 1, 20, 16, 0, 0)),
+                    foto=foto_teste,
+                )
+
+                resposta = self.client.get(
+                    reverse('consumo:baixar_relatorios_lotes_periodo_zip'),
+                    {
+                        'periodo': 'personalizado',
+                        'data_inicio': '2026-01-15',
+                        'data_fim': '2026-02-15',
+                    }
+                )
+
+            self.assertEqual(resposta.status_code, 200)
+            self.assertEqual(resposta['Content-Type'], 'application/zip')
+
+            zip_buffer = io.BytesIO(resposta.content)
+            with zipfile.ZipFile(zip_buffer, 'r') as arquivo_zip:
+                nomes_arquivos = arquivo_zip.namelist()
+
+            self.assertTrue(any(nome.endswith('relatorio_lote_701_20260115_20260215.pdf') for nome in nomes_arquivos))
+            self.assertTrue(any('/fotos/' in nome and nome.endswith('.jpg') for nome in nomes_arquivos))

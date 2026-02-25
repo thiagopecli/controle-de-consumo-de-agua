@@ -20,6 +20,9 @@
             <a href="{% url 'consumo:exportar_graficos_consumo_excel' %}?{{ request.GET.urlencode }}" class="btn btn-primary" style="background: #27ae60;">
                 📊 Baixar Excel
             </a>
+            <a href="{% url 'consumo:baixar_relatorios_lotes_periodo_zip' %}?{{ request.GET.urlencode }}" class="btn btn-primary" style="background: #6f42c1;">
+                🗂️ Baixar todos os relatórios do período selecionado
+            </a>
             <a href="{% url 'consumo:dashboard' %}" class="btn btn-secondary">
                 ← Voltar
             </a>
