@@ -2,7 +2,6 @@ import io
 import os
 import tempfile
 import zipfile
-from datetime import datetime
 
 from django.test import TestCase
 from django.test import override_settings

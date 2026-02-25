@@ -1272,7 +1272,7 @@ def exportar_graficos_consumo_pdf(request):
 
 
 def baixar_relatorios_lotes_periodo_zip(request):
-    """Baixa todos os relatórios individuais de lotes (com fotos já embutidas no PDF) em um único ZIP."""
+    """Baixa todos os relatórios individuais de lotes (com fotos embutidas no PDF) em um único ZIP."""
     agora = timezone.localtime(timezone.now())
     ultima_coleta = Leitura.objects.filter(
         hidrometro__ativo=True,
@@ -1340,7 +1340,6 @@ def baixar_relatorios_lotes_periodo_zip(request):
     nomes_zip_adicionados = set()
 
     with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as arquivo_zip:
-        # 1) Prioriza relatórios já organizados em pasta por período
         if os.path.isdir(pasta_relatorios):
             for raiz, _, arquivos in os.walk(pasta_relatorios):
                 for nome_arquivo in arquivos:
@@ -1359,7 +1358,6 @@ def baixar_relatorios_lotes_periodo_zip(request):
                     nomes_zip_adicionados.add(caminho_zip)
                     total_arquivos += 1
 
-        # 2) Fallback: procura PDFs individuais já gerados na raiz do projeto
         padrao_raiz = os.path.join(
             settings.BASE_DIR,
             f'relatorio_lote_*_{data_inicio.strftime("%Y%m%d")}_{data_fim.strftime("%Y%m%d")}.pdf'
