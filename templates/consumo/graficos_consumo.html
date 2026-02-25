@@ -20,9 +20,9 @@
             <a href="{% url 'consumo:exportar_graficos_consumo_excel' %}?{{ request.GET.urlencode }}" class="btn btn-primary" style="background: #27ae60;">
                 📊 Baixar Excel
             </a>
-            <a href="{% url 'consumo:baixar_relatorios_lotes_periodo_zip' %}?{{ request.GET.urlencode }}" class="btn btn-primary" style="background: #6f42c1;">
-                🗂️ Baixar todos os relatórios do período selecionado
-            </a>
+            <button onclick="abrirModalRelatorios()" class="btn btn-primary" style="background: #6f42c1;">
+                🗂️ Baixar Relatórios dos Lotes
+            </button>
             <a href="{% url 'consumo:dashboard' %}" class="btn btn-secondary">
                 ← Voltar
             </a>
@@ -543,6 +543,134 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+// Modal de Relatórios
+function abrirModalRelatorios() {
+    document.getElementById('modal-relatorios').style.display = 'flex';
+}
+
+function fecharModalRelatorios() {
+    document.getElementById('modal-relatorios').style.display = 'none';
+}
+
+function baixarRelatoriosFaixa() {
+    const faixa = document.getElementById('select-faixa-lotes').value;
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    // Adicionar faixa aos parâmetros existentes
+    if (faixa !== 'todos') {
+        const [inicio, fim] = faixa.split('-');
+        urlParams.set('lote_inicio', inicio);
+        urlParams.set('lote_fim', fim);
+    } else {
+        urlParams.delete('lote_inicio');
+        urlParams.delete('lote_fim');
+    }
+    
+    // Construir URL e redirecionar
+    const url = '{% url "consumo:baixar_relatorios_lotes_periodo_zip" %}?' + urlParams.toString();
+    window.location.href = url;
+    
+    // Fechar modal após um pequeno delay
+    setTimeout(() => fecharModalRelatorios(), 500);
+}
+
+// Fechar modal ao clicar fora
+window.onclick = function(event) {
+    const modal = document.getElementById('modal-relatorios');
+    if (event.target === modal) {
+        fecharModalRelatorios();
+    }
+}
 </script>
+
+<!-- Modal de Seleção de Faixas -->
+<div id="modal-relatorios" style="
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    align-items: center;
+    justify-content: center;
+">
+    <div style="
+        background: white;
+        padding: 2rem;
+        border-radius: 15px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        max-width: 500px;
+        width: 90%;
+        animation: slideDown 0.3s ease-out;
+    ">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h3 style="color: var(--primary-color); margin: 0; font-size: 1.3rem;">
+                🗂️ Baixar Relatórios dos Lotes
+            </h3>
+            <button onclick="fecharModalRelatorios()" style="
+                background: none;
+                border: none;
+                font-size: 1.8rem;
+                color: #999;
+                cursor: pointer;
+                line-height: 1;
+            ">&times;</button>
+        </div>
+        
+        <p style="color: #666; margin-bottom: 1.5rem; line-height: 1.6;">
+            <strong>⏱️ Importante:</strong> Para evitar timeout, os 310 lotes estão divididos em faixas de 50 lotes. 
+            Selecione a faixa desejada para download:
+        </p>
+        
+        <div style="margin-bottom: 1.5rem;">
+            <label for="select-faixa-lotes" style="display: block; margin-bottom: 0.5rem; color: var(--dark-text); font-weight: 500;">
+                Selecione a Faixa de Lotes:
+            </label>
+            <select id="select-faixa-lotes" style="
+                width: 100%;
+                padding: 0.75rem;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                font-size: 1rem;
+                background: white;
+                cursor: pointer;
+            ">
+                <option value="1-50">📦 Lotes 1 a 50</option>
+                <option value="51-100">📦 Lotes 51 a 100</option>
+                <option value="101-150">📦 Lotes 101 a 150</option>
+                <option value="151-200">📦 Lotes 151 a 200</option>
+                <option value="201-250">📦 Lotes 201 a 250</option>
+                <option value="251-300">📦 Lotes 251 a 300</option>
+                <option value="301-320">📦 Lotes 301 a 320</option>
+                <option value="todos" style="font-weight: bold; background: #fff3cd;">⚠️ Todos (pode dar timeout!)</option>
+            </select>
+        </div>
+        
+        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+            <button onclick="fecharModalRelatorios()" class="btn btn-secondary">
+                Cancelar
+            </button>
+            <button onclick="baixarRelatoriosFaixa()" class="btn btn-primary" style="background: #6f42c1;">
+                📥 Baixar Relatórios
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+</style>
 
 {% endblock %}

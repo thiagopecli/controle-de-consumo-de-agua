@@ -91,52 +91,86 @@ class HtmlViewsSmokeTests(TestCase):
         """Testa download ZIP com geração automática de PDFs no período"""
         from datetime import timedelta
         
-        # Criar lote com leituras no período de teste
+        # Criar vários lotes com leituras para testar paginação
         data_ref = timezone.now() - timedelta(days=15)
-        lote_teste = Lote.objects.create(numero='999', tipo='residencial')
-        h_teste = Hidrometro.objects.create(
-            numero='H999', 
-            lote=lote_teste, 
-            ativo=True, 
-            data_instalacao=data_ref.date()
-        )
+        lotes_teste = []
         
-        # Criar duas leituras para calcular consumo
-        Leitura.objects.create(
-            hidrometro=h_teste,
-            leitura=10.0,
-            periodo='manha',
-            data_leitura=data_ref,
-        )
-        Leitura.objects.create(
-            hidrometro=h_teste,
-            leitura=15.0,
-            periodo='tarde',
-            data_leitura=data_ref + timedelta(days=1),
-        )
+        for num_lote in [10, 55, 120]:  # Lotes em diferentes faixas
+            lote = Lote.objects.create(numero=str(num_lote), tipo='residencial')
+            h = Hidrometro.objects.create(
+                numero=f'H{num_lote}', 
+                lote=lote, 
+                ativo=True, 
+                data_instalacao=data_ref.date()
+            )
+            
+            # Criar duas leituras para calcular consumo
+            Leitura.objects.create(
+                hidrometro=h,
+                leitura=10.0,
+                periodo='manha',
+                data_leitura=data_ref,
+            )
+            Leitura.objects.create(
+                hidrometro=h,
+                leitura=15.0,
+                periodo='tarde',
+                data_leitura=data_ref + timedelta(days=1),
+            )
+            lotes_teste.append(num_lote)
         
-        # Fazer requisição
+        # Testar download de faixa específica (1-50)
         resposta = self.client.get(
             reverse('consumo:baixar_relatorios_lotes_periodo_zip'),
             {
                 'periodo': 'personalizado',
                 'data_inicio': (data_ref - timedelta(days=1)).strftime('%Y-%m-%d'),
                 'data_fim': (data_ref + timedelta(days=10)).strftime('%Y-%m-%d'),
+                'lote_inicio': '1',
+                'lote_fim': '50',
             }
         )
 
         # Verificar resposta
         self.assertEqual(resposta.status_code, 200, f"Erro: {resposta.content.decode() if resposta.status_code != 200 else 'OK'}")
         self.assertEqual(resposta['Content-Type'], 'application/zip')
+        self.assertIn('lotes_1_a_50', resposta['Content-Disposition'])
 
         # Verificar conteúdo do ZIP
         zip_buffer = io.BytesIO(resposta.content)
         with zipfile.ZipFile(zip_buffer, 'r') as arquivo_zip:
             nomes_arquivos = arquivo_zip.namelist()
-            # Deve ter pelo menos 1 PDF (do lote 999)
-            self.assertGreater(len(nomes_arquivos), 0)
-            # Deve ter um PDF do lote 999
+            # Deve ter PDF do lote 10 (dentro da faixa 1-50)
             self.assertTrue(
-                any('relatorio_lote_999' in nome for nome in nomes_arquivos),
-                f"Esperado PDF do lote 999, encontrado: {nomes_arquivos}"
+                any('relatorio_lote_10' in nome for nome in nomes_arquivos),
+                f"Esperado PDF do lote 10, encontrado: {nomes_arquivos}"
             )
+            # NÃO deve ter PDF do lote 55 (fora da faixa 1-50)
+            self.assertFalse(
+                any('relatorio_lote_55' in nome for nome in nomes_arquivos),
+                f"Lote 55 NÃO deveria estar na faixa 1-50"
+            )
+        
+        # Testar download de outra faixa (51-150)
+        resposta2 = self.client.get(
+            reverse('consumo:baixar_relatorios_lotes_periodo_zip'),
+            {
+                'periodo': 'personalizado',
+                'data_inicio': (data_ref - timedelta(days=1)).strftime('%Y-%m-%d'),
+                'data_fim': (data_ref + timedelta(days=10)).strftime('%Y-%m-%d'),
+                'lote_inicio': '51',
+                'lote_fim': '150',
+            }
+        )
+        
+        self.assertEqual(resposta2.status_code, 200)
+        self.assertIn('lotes_51_a_150', resposta2['Content-Disposition'])
+        
+        zip_buffer2 = io.BytesIO(resposta2.content)
+        with zipfile.ZipFile(zip_buffer2, 'r') as arquivo_zip:
+            nomes_arquivos2 = arquivo_zip.namelist()
+            # Deve ter PDFs dos lotes 55 e 120 (dentro da faixa 51-150)
+            self.assertTrue(any('relatorio_lote_55' in nome for nome in nomes_arquivos2))
+            self.assertTrue(any('relatorio_lote_120' in nome for nome in nomes_arquivos2))
+            # NÃO deve ter PDF do lote 10 (fora da faixa)
+            self.assertFalse(any('relatorio_lote_10' in nome for nome in nomes_arquivos2))
