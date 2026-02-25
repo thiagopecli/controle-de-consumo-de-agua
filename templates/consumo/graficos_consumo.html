@@ -42,9 +42,6 @@
                         Período:
                     </label>
                     <select name="periodo" id="periodo" class="form-control" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;">
-                        <option value="mes_atual" {% if dados_graficos.periodo_selecionado == 'mes_atual' %}selected{% endif %}>Mês Atual (Última Coleta)</option>
-                        <option value="2meses" {% if dados_graficos.periodo_selecionado == '2meses' %}selected{% endif %}>Últimos 2 meses</option>
-                        <option value="3meses" {% if dados_graficos.periodo_selecionado == '3meses' %}selected{% endif %}>Últimos 3 meses</option>
                         <option value="ano_atual" {% if dados_graficos.periodo_selecionado == 'ano_atual' %}selected{% endif %}>Ano Atual</option>
                         <option value="personalizado" {% if dados_graficos.periodo_selecionado == 'personalizado' %}selected{% endif %}>Período Personalizado</option>
                     </select>
