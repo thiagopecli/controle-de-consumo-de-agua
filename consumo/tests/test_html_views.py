@@ -2,6 +2,7 @@ import io
 import os
 import tempfile
 import zipfile
+import base64
 from datetime import datetime
 
 from django.test import TestCase
@@ -11,6 +12,11 @@ from django.utils import timezone
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from consumo.models import Lote, Hidrometro, Leitura
+
+
+PNG_1X1 = base64.b64decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z9XkAAAAASUVORK5CYII='
+)
 
 
 class HtmlViewsSmokeTests(TestCase):
@@ -100,9 +106,9 @@ class HtmlViewsSmokeTests(TestCase):
 
             with override_settings(BASE_DIR=base_dir_temp, MEDIA_ROOT=media_dir_temp):
                 foto_teste = SimpleUploadedFile(
-                    'foto_teste.jpg',
-                    b'conteudo-foto-teste',
-                    content_type='image/jpeg'
+                    'foto_teste.png',
+                    PNG_1X1,
+                    content_type='image/png'
                 )
                 Leitura.objects.create(
                     hidrometro=self.h,
@@ -129,4 +135,25 @@ class HtmlViewsSmokeTests(TestCase):
                 nomes_arquivos = arquivo_zip.namelist()
 
             self.assertTrue(any(nome.endswith('relatorio_lote_701_20260115_20260215.pdf') for nome in nomes_arquivos))
-            self.assertTrue(any('/fotos/' in nome and nome.endswith('.jpg') for nome in nomes_arquivos))
+            self.assertTrue(any('/fotos/' in nome and nome.lower().endswith(('.jpg', '.jpeg', '.png')) for nome in nomes_arquivos))
+
+    def test_download_zip_gera_pdf_lote_sem_pasta_pregerada(self):
+        with tempfile.TemporaryDirectory() as base_dir_temp, tempfile.TemporaryDirectory() as media_dir_temp:
+            with override_settings(BASE_DIR=base_dir_temp, MEDIA_ROOT=media_dir_temp):
+                resposta = self.client.get(
+                    reverse('consumo:baixar_relatorios_lotes_periodo_zip'),
+                    {
+                        'periodo': 'personalizado',
+                        'data_inicio': '2026-01-15',
+                        'data_fim': '2026-02-15',
+                    }
+                )
+
+            self.assertEqual(resposta.status_code, 200)
+            self.assertEqual(resposta['Content-Type'], 'application/zip')
+
+            zip_buffer = io.BytesIO(resposta.content)
+            with zipfile.ZipFile(zip_buffer, 'r') as arquivo_zip:
+                nomes_arquivos = arquivo_zip.namelist()
+
+            self.assertTrue(any(nome.endswith('relatorio_lote_701_20260115_20260215.pdf') for nome in nomes_arquivos))

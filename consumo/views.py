@@ -1337,6 +1337,7 @@ def baixar_relatorios_lotes_periodo_zip(request):
 
     buffer = io.BytesIO()
     total_arquivos = 0
+    nomes_zip_adicionados = set()
 
     with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as arquivo_zip:
         if os.path.isdir(pasta_relatorios):
@@ -1349,8 +1350,47 @@ def baixar_relatorios_lotes_periodo_zip(request):
                         subpasta_relatorios,
                         relativo_relatorios,
                     )
+                    if caminho_zip in nomes_zip_adicionados:
+                        continue
                     arquivo_zip.write(caminho_arquivo, caminho_zip)
+                    nomes_zip_adicionados.add(caminho_zip)
                     total_arquivos += 1
+
+        from django.test.client import RequestFactory
+
+        request_factory = RequestFactory()
+        lotes_residenciais = Lote.objects.filter(ativo=True, tipo='residencial').order_by('numero')
+        data_inicio_str = data_inicio.strftime('%Y-%m-%d')
+        data_fim_str = data_fim.strftime('%Y-%m-%d')
+
+        for lote in lotes_residenciais:
+            request_lote = request_factory.get(
+                '/',
+                {
+                    'periodo': 'personalizado',
+                    'data_inicio': data_inicio_str,
+                    'data_fim': data_fim_str,
+                },
+            )
+            resposta_pdf_lote = exportar_graficos_lote_pdf(request_lote, lote.id)
+            if resposta_pdf_lote.status_code != 200:
+                continue
+
+            nome_relatorio_pdf = (
+                f"relatorio_lote_{lote.numero}_{data_inicio.strftime('%Y%m%d')}_{data_fim.strftime('%Y%m%d')}.pdf"
+            )
+            caminho_zip_relatorio = os.path.join(
+                pasta_pacote_zip,
+                subpasta_relatorios,
+                nome_relatorio_pdf,
+            )
+
+            if caminho_zip_relatorio in nomes_zip_adicionados:
+                continue
+
+            arquivo_zip.writestr(caminho_zip_relatorio, resposta_pdf_lote.content)
+            nomes_zip_adicionados.add(caminho_zip_relatorio)
+            total_arquivos += 1
 
         leituras_com_foto = (
             Leitura.objects.filter(
@@ -1380,7 +1420,10 @@ def baixar_relatorios_lotes_periodo_zip(request):
                 f"hidrometro_{leitura.hidrometro.numero}",
                 nome_arquivo_foto,
             )
+            if caminho_zip_foto in nomes_zip_adicionados:
+                continue
             arquivo_zip.write(caminho_foto, caminho_zip_foto)
+            nomes_zip_adicionados.add(caminho_zip_foto)
             total_arquivos += 1
 
     if total_arquivos == 0:
