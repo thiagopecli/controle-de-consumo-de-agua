@@ -11,6 +11,7 @@ import json
 import io
 import os
 import zipfile
+import glob
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.chart import BarChart, PieChart, LineChart, Reference
@@ -1271,7 +1272,7 @@ def exportar_graficos_consumo_pdf(request):
 
 
 def baixar_relatorios_lotes_periodo_zip(request):
-    """Baixa todos os relatórios individuais de lotes e fotos do período selecionado em um único ZIP."""
+    """Baixa todos os relatórios individuais de lotes (com fotos já embutidas no PDF) em um único ZIP."""
     agora = timezone.localtime(timezone.now())
     ultima_coleta = Leitura.objects.filter(
         hidrometro__ativo=True,
@@ -1333,15 +1334,18 @@ def baixar_relatorios_lotes_periodo_zip(request):
     pasta_relatorios = os.path.join(settings.BASE_DIR, f'relatorios_lotes_{intervalo_token}')
     pasta_pacote_zip = f'pacote_relatorios_lotes_{intervalo_token}'
     subpasta_relatorios = f'relatorios_lotes_{intervalo_token}'
-    subpasta_fotos = 'fotos'
 
     buffer = io.BytesIO()
     total_arquivos = 0
+    nomes_zip_adicionados = set()
 
     with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as arquivo_zip:
+        # 1) Prioriza relatórios já organizados em pasta por período
         if os.path.isdir(pasta_relatorios):
             for raiz, _, arquivos in os.walk(pasta_relatorios):
                 for nome_arquivo in arquivos:
+                    if not nome_arquivo.lower().endswith('.pdf'):
+                        continue
                     caminho_arquivo = os.path.join(raiz, nome_arquivo)
                     relativo_relatorios = os.path.relpath(caminho_arquivo, pasta_relatorios)
                     caminho_zip = os.path.join(
@@ -1349,43 +1353,33 @@ def baixar_relatorios_lotes_periodo_zip(request):
                         subpasta_relatorios,
                         relativo_relatorios,
                     )
+                    if caminho_zip in nomes_zip_adicionados:
+                        continue
                     arquivo_zip.write(caminho_arquivo, caminho_zip)
+                    nomes_zip_adicionados.add(caminho_zip)
                     total_arquivos += 1
 
-        leituras_com_foto = (
-            Leitura.objects.filter(
-                hidrometro__lote__tipo='residencial',
-                hidrometro__lote__ativo=True,
-                data_leitura__date__gte=data_inicio,
-                data_leitura__date__lte=data_fim,
-                foto__isnull=False,
-            )
-            .exclude(foto='')
-            .select_related('hidrometro__lote')
+        # 2) Fallback: procura PDFs individuais já gerados na raiz do projeto
+        padrao_raiz = os.path.join(
+            settings.BASE_DIR,
+            f'relatorio_lote_*_{data_inicio.strftime("%Y%m%d")}_{data_fim.strftime("%Y%m%d")}.pdf'
         )
-
-        for leitura in leituras_com_foto:
-            caminho_foto = getattr(leitura.foto, 'path', '')
-            if not caminho_foto or not os.path.exists(caminho_foto):
+        for caminho_pdf in glob.glob(padrao_raiz):
+            nome_pdf = os.path.basename(caminho_pdf)
+            caminho_zip = os.path.join(pasta_pacote_zip, subpasta_relatorios, nome_pdf)
+            if caminho_zip in nomes_zip_adicionados:
                 continue
-
-            extensao = os.path.splitext(caminho_foto)[1] or '.jpg'
-            nome_arquivo_foto = (
-                f"leitura_{leitura.id}_{leitura.data_leitura.strftime('%Y%m%d_%H%M%S')}{extensao}"
-            )
-            caminho_zip_foto = os.path.join(
-                pasta_pacote_zip,
-                subpasta_fotos,
-                f"lote_{leitura.hidrometro.lote.numero}",
-                f"hidrometro_{leitura.hidrometro.numero}",
-                nome_arquivo_foto,
-            )
-            arquivo_zip.write(caminho_foto, caminho_zip_foto)
+            arquivo_zip.write(caminho_pdf, caminho_zip)
+            nomes_zip_adicionados.add(caminho_zip)
             total_arquivos += 1
 
     if total_arquivos == 0:
         return HttpResponse(
-            f'Nenhum relatório/foto foi encontrado para o período de {data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}.',
+            (
+                f'Nenhum relatório PDF foi encontrado para o período de '
+                f'{data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}. '
+                f'Gere os relatórios individuais desse período e tente novamente.'
+            ),
             status=404,
         )
 
