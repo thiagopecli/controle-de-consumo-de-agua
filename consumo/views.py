@@ -10,6 +10,7 @@ from datetime import timedelta, datetime
 import json
 import io
 import os
+import zipfile
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.chart import BarChart, PieChart, LineChart, Reference
@@ -1266,6 +1267,133 @@ def exportar_graficos_consumo_pdf(request):
     if img_buffer_top is not None:
         img_buffer_top.close()
     
+    return response
+
+
+def baixar_relatorios_lotes_periodo_zip(request):
+    """Baixa todos os relatórios individuais de lotes e fotos do período selecionado em um único ZIP."""
+    agora = timezone.localtime(timezone.now())
+    ultima_coleta = Leitura.objects.filter(
+        hidrometro__ativo=True,
+        hidrometro__lote__tipo='residencial'
+    ).aggregate(ultima=Max('data_leitura'))['ultima']
+
+    if ultima_coleta:
+        hoje_ref = timezone.localtime(ultima_coleta) if timezone.is_aware(ultima_coleta) else timezone.make_aware(ultima_coleta)
+    else:
+        hoje_ref = agora
+
+    periodo_selecionado = request.GET.get('periodo', 'mes_atual')
+
+    def _inicio_mes_menos(data_referencia, meses_anteriores):
+        total_meses = data_referencia.year * 12 + (data_referencia.month - 1) - meses_anteriores
+        ano = total_meses // 12
+        mes = (total_meses % 12) + 1
+        return data_referencia.replace(year=ano, month=mes, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    if periodo_selecionado == 'mes_atual':
+        data_inicio_dt = hoje_ref.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        data_fim_dt = hoje_ref
+    elif periodo_selecionado == '2meses':
+        data_inicio_dt = _inicio_mes_menos(hoje_ref, 1)
+        data_fim_dt = hoje_ref
+    elif periodo_selecionado == '3meses':
+        data_inicio_dt = _inicio_mes_menos(hoje_ref, 2)
+        data_fim_dt = hoje_ref
+    elif periodo_selecionado == 'ano_atual':
+        data_inicio_dt = timezone.datetime(hoje_ref.year, 1, 1, 0, 0, 0, tzinfo=hoje_ref.tzinfo)
+        data_fim_dt = hoje_ref
+    elif periodo_selecionado == 'personalizado':
+        data_inicio_str = request.GET.get('data_inicio')
+        data_fim_str = request.GET.get('data_fim')
+        if data_inicio_str and data_fim_str:
+            try:
+                data_inicio_dt = timezone.make_aware(
+                    timezone.datetime.strptime(data_inicio_str, '%Y-%m-%d').replace(hour=0, minute=0, second=0, microsecond=0)
+                )
+                data_fim_dt = timezone.make_aware(
+                    timezone.datetime.strptime(data_fim_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59, microsecond=999999)
+                )
+                if data_fim_dt > hoje_ref:
+                    data_fim_dt = hoje_ref
+            except (ValueError, TypeError):
+                data_inicio_dt = hoje_ref.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                data_fim_dt = hoje_ref
+        else:
+            data_inicio_dt = hoje_ref.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            data_fim_dt = hoje_ref
+    else:
+        data_inicio_dt = hoje_ref.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        data_fim_dt = hoje_ref
+
+    data_inicio = data_inicio_dt.date()
+    data_fim = data_fim_dt.date()
+    intervalo_token = f"{data_inicio.strftime('%Y%m%d')}_{data_fim.strftime('%Y%m%d')}"
+
+    pasta_relatorios = os.path.join(settings.BASE_DIR, f'relatorios_lotes_{intervalo_token}')
+    pasta_pacote_zip = f'pacote_relatorios_lotes_{intervalo_token}'
+    subpasta_relatorios = f'relatorios_lotes_{intervalo_token}'
+    subpasta_fotos = 'fotos'
+
+    buffer = io.BytesIO()
+    total_arquivos = 0
+
+    with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as arquivo_zip:
+        if os.path.isdir(pasta_relatorios):
+            for raiz, _, arquivos in os.walk(pasta_relatorios):
+                for nome_arquivo in arquivos:
+                    caminho_arquivo = os.path.join(raiz, nome_arquivo)
+                    relativo_relatorios = os.path.relpath(caminho_arquivo, pasta_relatorios)
+                    caminho_zip = os.path.join(
+                        pasta_pacote_zip,
+                        subpasta_relatorios,
+                        relativo_relatorios,
+                    )
+                    arquivo_zip.write(caminho_arquivo, caminho_zip)
+                    total_arquivos += 1
+
+        leituras_com_foto = (
+            Leitura.objects.filter(
+                hidrometro__lote__tipo='residencial',
+                hidrometro__lote__ativo=True,
+                data_leitura__date__gte=data_inicio,
+                data_leitura__date__lte=data_fim,
+                foto__isnull=False,
+            )
+            .exclude(foto='')
+            .select_related('hidrometro__lote')
+        )
+
+        for leitura in leituras_com_foto:
+            caminho_foto = getattr(leitura.foto, 'path', '')
+            if not caminho_foto or not os.path.exists(caminho_foto):
+                continue
+
+            extensao = os.path.splitext(caminho_foto)[1] or '.jpg'
+            nome_arquivo_foto = (
+                f"leitura_{leitura.id}_{leitura.data_leitura.strftime('%Y%m%d_%H%M%S')}{extensao}"
+            )
+            caminho_zip_foto = os.path.join(
+                pasta_pacote_zip,
+                subpasta_fotos,
+                f"lote_{leitura.hidrometro.lote.numero}",
+                f"hidrometro_{leitura.hidrometro.numero}",
+                nome_arquivo_foto,
+            )
+            arquivo_zip.write(caminho_foto, caminho_zip_foto)
+            total_arquivos += 1
+
+    if total_arquivos == 0:
+        return HttpResponse(
+            f'Nenhum relatório/foto foi encontrado para o período de {data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}.',
+            status=404,
+        )
+
+    buffer.seek(0)
+    response = HttpResponse(buffer.getvalue(), content_type='application/zip')
+    response['Content-Disposition'] = (
+        f'attachment; filename="pacote_relatorios_lotes_{intervalo_token}.zip"'
+    )
     return response
 
 

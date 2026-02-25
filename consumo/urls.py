@@ -25,6 +25,7 @@ urlpatterns = [
     # Exportação de relatórios
     path('graficos/exportar/pdf/', views.exportar_graficos_consumo_pdf, name='exportar_graficos_consumo_pdf'),
     path('graficos/exportar/excel/', views.exportar_graficos_consumo_excel, name='exportar_graficos_consumo_excel'),
+    path('graficos/exportar/relatorios-lotes/', views.baixar_relatorios_lotes_periodo_zip, name='baixar_relatorios_lotes_periodo_zip'),
     path('lotes/<int:lote_id>/graficos/exportar/pdf/', views.exportar_graficos_lote_pdf, name='exportar_graficos_lote_pdf'),
     path('lotes/<int:lote_id>/graficos/exportar/excel/', views.exportar_graficos_lote_excel, name='exportar_graficos_lote_excel'),
 ]
