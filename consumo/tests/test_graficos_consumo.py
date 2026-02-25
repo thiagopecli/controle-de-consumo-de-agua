@@ -84,9 +84,8 @@ class GraficosConsumoViewTests(TestCase):
         for mes_en in meses_ingles:
             self.assertNotIn(mes_en, periodo_label)
 
-        # Verificar que contém formato português (mes/ano)
-        self.assertIn('/', periodo_label)
-        self.assertIn('Última coleta', periodo_label)
+        # Verificar que contém formato português - "Ano Atual (ano)" para padrão
+        self.assertIn('Ano Atual', periodo_label)
 
 
 class GraficosConsumoSemDadosTests(TestCase):
