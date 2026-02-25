@@ -300,6 +300,16 @@ curl "http://localhost:8000/api/leituras/?data_inicio=2026-01-01&data_fim=2026-0
 - Configuração de CORS para APIs
 - Variáveis de ambiente para dados sensíveis
 
+## 📲 WhatsApp Automático (dia 20)
+
+- Comando mensal automático: `python manage.py enviar_whatsapp_mensal`
+- Período enviado: do dia 1 até o dia da execução (ex.: dia 20 do mês)
+- Template Twilio usado: `TWILIO_CONTENT_SID` com variáveis `{{1}}..{{5}}`
+- Simulação sem envio real: `python manage.py enviar_whatsapp_mensal --dry-run --data-referencia 2026-02-20`
+- Agendamento em produção: serviço `cron` no [render.yaml](render.yaml) com schedule `0 11 20 * *` (08:00 no horário de Brasília)
+- Observação de fuso: o Render agenda em UTC; por isso `0 11 20 * *` equivale a 08:00 em Brasília.
+- Variáveis obrigatórias no ambiente do cron: `DATABASE_URL`, `APP_BASE_URL`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_CONTENT_SID`, `TWILIO_WHATSAPP_FROM`, `TWILIO_WHATSAPP_TO`
+
 ## 🚀 Próximos Passos
 
 Conforme mencionado, você pode adicionar:
