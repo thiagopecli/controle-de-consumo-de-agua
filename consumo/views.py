@@ -2,6 +2,7 @@ from django.shortcuts import render, get_object_or_404
 from django.utils import timezone
 from django.db.models import Sum, Avg, Max, Min, Count, Q, Case, When, Value, IntegerField
 from django.http import HttpResponse
+from django.conf import settings
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -18,6 +19,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.utils import ImageReader
 
 from .models import Lote, Hidrometro, Leitura
 from .serializers import (
@@ -40,6 +42,55 @@ def formatar_mes_ano_ptbr(data):
     """Retorna string formatada 'Mês/Ano' em português do Brasil"""
     mes_nome = MESES_PT_BR[data.month]
     return f"{mes_nome}/{data.year}"
+
+
+def _obter_caminho_logo_marca_dagua():
+    caminhos = [
+        os.path.join(settings.BASE_DIR, 'static', 'img', 'logo.jpeg'),
+        os.path.join(settings.BASE_DIR, 'logo.jpeg'),
+    ]
+    for caminho in caminhos:
+        if os.path.exists(caminho):
+            return caminho
+    return None
+
+
+def _desenhar_marca_dagua_logo(canvas, doc):
+    caminho_logo = _obter_caminho_logo_marca_dagua()
+    if not caminho_logo:
+        return
+
+    try:
+        pagina_largura, pagina_altura = doc.pagesize
+        imagem = ImageReader(caminho_logo)
+        img_largura, img_altura = imagem.getSize()
+        proporcao = img_altura / float(img_largura) if img_largura else 1
+
+        logo_largura = pagina_largura * 0.45
+        logo_altura = logo_largura * proporcao
+
+        if logo_altura > pagina_altura * 0.6:
+            logo_altura = pagina_altura * 0.6
+            logo_largura = logo_altura / proporcao if proporcao else logo_largura
+
+        pos_x = (pagina_largura - logo_largura) / 2
+        pos_y = (pagina_altura - logo_altura) / 2
+
+        canvas.saveState()
+        if hasattr(canvas, 'setFillAlpha'):
+            canvas.setFillAlpha(0.08)
+        canvas.drawImage(
+            caminho_logo,
+            pos_x,
+            pos_y,
+            width=logo_largura,
+            height=logo_altura,
+            preserveAspectRatio=True,
+            mask='auto'
+        )
+        canvas.restoreState()
+    except Exception:
+        return
 
 
 class LoteViewSet(viewsets.ModelViewSet):
@@ -1040,6 +1091,8 @@ def exportar_graficos_consumo_pdf(request):
     )
     
     # Criar PDF
+    img_buffer = None
+    img_buffer_top = None
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(A4),
                           rightMargin=30, leftMargin=30,
@@ -1197,12 +1250,21 @@ def exportar_graficos_consumo_pdf(request):
     elements.append(Spacer(1, 0.3*inch))
     
     # Construir PDF
-    doc.build(elements)
+    doc.build(
+        elements,
+        onFirstPage=_desenhar_marca_dagua_logo,
+        onLaterPages=_desenhar_marca_dagua_logo
+    )
     
     # Preparar resposta
     buffer.seek(0)
     response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="relatorio_consumo_condominio_{agora.strftime("%Y%m%d")}.pdf"'
+    buffer.close()
+    if img_buffer is not None:
+        img_buffer.close()
+    if img_buffer_top is not None:
+        img_buffer_top.close()
     
     return response
 
@@ -1814,7 +1876,11 @@ def exportar_graficos_lote_pdf(request, lote_id):
     
     
     # Construir PDF
-    doc.build(elements)
+    doc.build(
+        elements,
+        onFirstPage=_desenhar_marca_dagua_logo,
+        onLaterPages=_desenhar_marca_dagua_logo
+    )
     
     # Preparar resposta
     buffer.seek(0)

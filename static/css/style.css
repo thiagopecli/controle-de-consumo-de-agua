@@ -78,8 +78,13 @@ canvas {
 }
 
 .nav-brand h1::before {
-    content: '💧';
-    font-size: 1.8rem;
+    content: '';
+    width: 4.6332rem;
+    height: 4.6332rem;
+    background-image: url('/static/img/logo.jpeg');
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
     filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
 }
 
