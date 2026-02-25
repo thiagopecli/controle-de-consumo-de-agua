@@ -1,6 +1,7 @@
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
+from datetime import datetime
 
 from consumo.models import Lote, Hidrometro, Leitura
 
@@ -64,13 +65,28 @@ class GraficosConsumoViewTests(TestCase):
         soma_top = sum(item['consumo_litros'] for item in top)
         self.assertGreaterEqual(dados['consumo_total_ano'], soma_top)
 
-        # Consumo diário do dia 5 deve existir (>= 0)
-        dia5 = [d for d in dados['consumo_por_dia'] if d['dia'] == 5][0]
-        self.assertGreaterEqual(dia5['consumo_litros'], 0)
-
         # Consumo mensal do mês atual deve existir (>= 0)
         mes_atual = [m for m in dados['consumo_mes'] if m['mes'] == self.mes][0]
         self.assertGreaterEqual(mes_atual['consumo_litros'], 0)
+
+    def test_periodo_label_em_portugues(self):
+        """Verifica se o label do período está em português"""
+        url = reverse('consumo:graficos_consumo')
+        response = self.client.get(url, {'periodo': 'mes_atual'})
+
+        self.assertEqual(response.status_code, 200)
+        dados = response.context['dados_graficos']
+        periodo_label = dados['periodo_label']
+
+        # Verificar que não contém nomes de meses em inglês
+        meses_ingles = ['January', 'February', 'March', 'April', 'May', 'June',
+                        'July', 'August', 'September', 'October', 'November', 'December']
+        for mes_en in meses_ingles:
+            self.assertNotIn(mes_en, periodo_label)
+
+        # Verificar que contém formato português (mes/ano)
+        self.assertIn('/', periodo_label)
+        self.assertIn('Última coleta', periodo_label)
 
 
 class GraficosConsumoSemDadosTests(TestCase):
@@ -83,7 +99,4 @@ class GraficosConsumoSemDadosTests(TestCase):
 
         self.assertEqual(dados['consumo_total_ano'], 0)
         self.assertEqual(len(dados['top_lotes']), 0)
-
-        # Deve trazer consumo por dia preenchido com zeros do mês atual
-        self.assertTrue(len(dados['consumo_por_dia']) > 0)
-        self.assertTrue(all(item['consumo_litros'] == 0 for item in dados['consumo_por_dia']))
+        self.assertNotIn('consumo_por_dia', dados)

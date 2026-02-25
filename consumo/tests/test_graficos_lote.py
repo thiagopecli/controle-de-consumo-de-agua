@@ -61,3 +61,28 @@ class GraficosLoteComConsumoTests(TestCase):
 
         # Flag sem_dados não deve estar presente
         self.assertFalse(response.context.get('sem_dados', False))
+
+    def test_consumo_mensal_exibe_todos_12_meses(self):
+        """Verifica se o gráfico mensal sempre exibe todos os 12 meses"""
+        url = reverse('consumo:graficos_lote', args=[self.lote.id])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        dados_json = response.context['dados_graficos']
+        
+        import json
+        dados = json.loads(dados_json)
+
+        # Verificar que tem exatamente 12 meses
+        consumo_mes = dados['consumo_mes']
+        self.assertEqual(len(consumo_mes), 12)
+
+        # Verificar que todos os meses de 1 a 12 estão presentes
+        meses_exibidos = [item['mes'] for item in consumo_mes]
+        self.assertEqual(meses_exibidos, list(range(1, 13)))
+
+        # Verificar que os nomes dos meses estão em português
+        nomes_portugues = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                          'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+        nomes_exibidos = [item['mes_nome'] for item in consumo_mes]
+        self.assertEqual(nomes_exibidos, nomes_portugues)

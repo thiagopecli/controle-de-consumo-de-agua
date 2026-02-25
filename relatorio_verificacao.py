@@ -16,12 +16,21 @@ from consumo.models import Lote, Hidrometro, Leitura
 from django.db import connection
 from django.utils import timezone
 
+# Mapeamento de meses em português
+MESES_PT_BR = {
+    1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
+    5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
+    9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
+}
+
 def print_header():
     print("\n" + "="*80)
     print("  RELATÓRIO DE VERIFICAÇÃO COMPLETA DO APLICATIVO")
     print("  Sistema de Controle de Consumo de Água")
     print("="*80)
-    print(f"  Data: {timezone.now().strftime('%d de %B de %Y às %H:%M')}")
+    agora = timezone.now()
+    mes_nome = MESES_PT_BR[agora.month]
+    print(f"  Data: {agora.day} de {mes_nome} de {agora.year} às {agora.strftime('%H:%M')}")
     print("="*80 + "\n")
 
 def print_section(title):
