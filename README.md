@@ -9,6 +9,8 @@ Sistema completo para gerenciamento e monitoramento de consumo de água através
 - ✅ API RESTful completa
 - ✅ Interface web intuitiva com dashboard
 - ✅ Gráficos interativos de consumo
+- ✅ Exportação de relatórios em PDF e Excel
+- ✅ **Download em lote de relatórios individuais (ZIP)** - Baixe todos os relatórios detalhados dos lotes em um único arquivo
 - **API:** Django REST Framework
  Sistema completo para gerenciamento e monitoramento de consumo de água através de hidrômetros, desenvolvido com Django, PostgreSQL e Django REST Framework.
 - **Gráficos:** Chart.js

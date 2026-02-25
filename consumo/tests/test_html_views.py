@@ -88,30 +88,55 @@ class HtmlViewsSmokeTests(TestCase):
         self.assertIn('dados_graficos', resp.context)
 
     def test_download_zip_relatorios_lotes_pdf(self):
-        with tempfile.TemporaryDirectory() as base_dir_temp:
-            pasta_relatorios = os.path.join(base_dir_temp, 'relatorios_lotes_20260115_20260215')
-            os.makedirs(pasta_relatorios, exist_ok=True)
+        """Testa download ZIP com geração automática de PDFs no período"""
+        from datetime import timedelta
+        
+        # Criar lote com leituras no período de teste
+        data_ref = timezone.now() - timedelta(days=15)
+        lote_teste = Lote.objects.create(numero='999', tipo='residencial')
+        h_teste = Hidrometro.objects.create(
+            numero='H999', 
+            lote=lote_teste, 
+            ativo=True, 
+            data_instalacao=data_ref.date()
+        )
+        
+        # Criar duas leituras para calcular consumo
+        Leitura.objects.create(
+            hidrometro=h_teste,
+            leitura=10.0,
+            periodo='manha',
+            data_leitura=data_ref,
+        )
+        Leitura.objects.create(
+            hidrometro=h_teste,
+            leitura=15.0,
+            periodo='tarde',
+            data_leitura=data_ref + timedelta(days=1),
+        )
+        
+        # Fazer requisição
+        resposta = self.client.get(
+            reverse('consumo:baixar_relatorios_lotes_periodo_zip'),
+            {
+                'periodo': 'personalizado',
+                'data_inicio': (data_ref - timedelta(days=1)).strftime('%Y-%m-%d'),
+                'data_fim': (data_ref + timedelta(days=10)).strftime('%Y-%m-%d'),
+            }
+        )
 
-            caminho_relatorio = os.path.join(pasta_relatorios, 'relatorio_lote_701_20260115_20260215.pdf')
-            with open(caminho_relatorio, 'wb') as arquivo_relatorio:
-                arquivo_relatorio.write(b'%PDF-1.4 arquivo de teste')
+        # Verificar resposta
+        self.assertEqual(resposta.status_code, 200, f"Erro: {resposta.content.decode() if resposta.status_code != 200 else 'OK'}")
+        self.assertEqual(resposta['Content-Type'], 'application/zip')
 
-            with override_settings(BASE_DIR=base_dir_temp):
-                resposta = self.client.get(
-                    reverse('consumo:baixar_relatorios_lotes_periodo_zip'),
-                    {
-                        'periodo': 'personalizado',
-                        'data_inicio': '2026-01-15',
-                        'data_fim': '2026-02-15',
-                    }
-                )
-
-            self.assertEqual(resposta.status_code, 200)
-            self.assertEqual(resposta['Content-Type'], 'application/zip')
-
-            zip_buffer = io.BytesIO(resposta.content)
-            with zipfile.ZipFile(zip_buffer, 'r') as arquivo_zip:
-                nomes_arquivos = arquivo_zip.namelist()
-
-            self.assertTrue(any(nome.endswith('relatorio_lote_701_20260115_20260215.pdf') for nome in nomes_arquivos))
-            self.assertFalse(any('/fotos/' in nome for nome in nomes_arquivos))
+        # Verificar conteúdo do ZIP
+        zip_buffer = io.BytesIO(resposta.content)
+        with zipfile.ZipFile(zip_buffer, 'r') as arquivo_zip:
+            nomes_arquivos = arquivo_zip.namelist()
+            # Deve ter pelo menos 1 PDF (do lote 999)
+            self.assertGreater(len(nomes_arquivos), 0)
+            # Deve ter um PDF do lote 999
+            self.assertTrue(
+                any('relatorio_lote_999' in nome for nome in nomes_arquivos),
+                f"Esperado PDF do lote 999, encontrado: {nomes_arquivos}"
+            )
