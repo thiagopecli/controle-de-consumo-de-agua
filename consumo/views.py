@@ -1272,7 +1272,9 @@ def exportar_graficos_consumo_pdf(request):
 
 
 def baixar_relatorios_lotes_periodo_zip(request):
-    """Baixa todos os relatórios individuais de lotes (com fotos embutidas no PDF) em um único ZIP."""
+    """Gera e baixa automaticamente todos os relatórios individuais de lotes em um único ZIP."""
+    from django.test import RequestFactory
+    
     agora = timezone.localtime(timezone.now())
     ultima_coleta = Leitura.objects.filter(
         hidrometro__ativo=True,
@@ -1331,65 +1333,67 @@ def baixar_relatorios_lotes_periodo_zip(request):
     data_fim = data_fim_dt.date()
     intervalo_token = f"{data_inicio.strftime('%Y%m%d')}_{data_fim.strftime('%Y%m%d')}"
 
-    pasta_relatorios = os.path.join(settings.BASE_DIR, f'relatorios_lotes_{intervalo_token}')
-    pasta_pacote_zip = f'pacote_relatorios_lotes_{intervalo_token}'
-    subpasta_relatorios = f'relatorios_lotes_{intervalo_token}'
+    # Buscar apenas lotes que têm leituras no período (otimização crítica)
+    lotes_com_leituras = Lote.objects.filter(
+        tipo='residencial',
+        hidrometros__ativo=True,
+        hidrometros__leituras__data_leitura__date__gte=data_inicio,
+        hidrometros__leituras__data_leitura__date__lte=data_fim
+    ).distinct().order_by('numero')
 
+    if not lotes_com_leituras.exists():
+        return HttpResponse(
+            f'Nenhum lote residencial com leituras encontrado para o período de '
+            f'{data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}.',
+            status=404
+        )
+
+    # Criar ZIP em memória
     buffer = io.BytesIO()
-    total_arquivos = 0
-    nomes_zip_adicionados = set()
+    factory = RequestFactory()
+    total_pdfs_gerados = 0
 
     with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as arquivo_zip:
-        if os.path.isdir(pasta_relatorios):
-            for raiz, _, arquivos in os.walk(pasta_relatorios):
-                for nome_arquivo in arquivos:
-                    if not nome_arquivo.lower().endswith('.pdf'):
-                        continue
-                    caminho_arquivo = os.path.join(raiz, nome_arquivo)
-                    relativo_relatorios = os.path.relpath(caminho_arquivo, pasta_relatorios)
-                    caminho_zip = os.path.join(
-                        pasta_pacote_zip,
-                        subpasta_relatorios,
-                        relativo_relatorios,
-                    )
-                    if caminho_zip in nomes_zip_adicionados:
-                        continue
-                    arquivo_zip.write(caminho_arquivo, caminho_zip)
-                    nomes_zip_adicionados.add(caminho_zip)
-                    total_arquivos += 1
-
-        padrao_raiz = os.path.join(
-            settings.BASE_DIR,
-            f'relatorio_lote_*_{data_inicio.strftime("%Y%m%d")}_{data_fim.strftime("%Y%m%d")}.pdf'
-        )
-        for caminho_pdf in glob.glob(padrao_raiz):
-            nome_pdf = os.path.basename(caminho_pdf)
-            caminho_zip = os.path.join(pasta_pacote_zip, subpasta_relatorios, nome_pdf)
-            if caminho_zip in nomes_zip_adicionados:
+        for lote in lotes_com_leituras:
+            # Criar requisição fake para gerar o PDF do lote
+            fake_request = factory.get(
+                f'/consumo/graficos/lote/{lote.id}/exportar/pdf/',
+                {
+                    'periodo': 'personalizado',
+                    'data_inicio': data_inicio.strftime('%Y-%m-%d'),
+                    'data_fim': data_fim.strftime('%Y-%m-%d')
+                }
+            )
+            fake_request.user = request.user
+            
+            try:
+                # Gerar PDF do lote
+                response_pdf = exportar_graficos_lote_pdf(fake_request, lote.id)
+                
+                if response_pdf.status_code == 200:
+                    # Nome do arquivo dentro do ZIP
+                    nome_arquivo = f'relatorio_lote_{lote.numero}_{intervalo_token}.pdf'
+                    caminho_no_zip = f'relatorios_lotes_{intervalo_token}/{nome_arquivo}'
+                    
+                    # Adicionar PDF ao ZIP
+                    arquivo_zip.writestr(caminho_no_zip, response_pdf.content)
+                    total_pdfs_gerados += 1
+            except Exception as e:
+                # Continuar mesmo se um lote falhar
                 continue
-            arquivo_zip.write(caminho_pdf, caminho_zip)
-            nomes_zip_adicionados.add(caminho_zip)
-            total_arquivos += 1
 
-    if total_arquivos == 0:
-        comando_geracao = (
-            f"python manage.py gerar_relatorios_lotes_periodo "
-            f"--data-inicio {data_inicio.strftime('%Y-%m-%d')} "
-            f"--data-fim {data_fim.strftime('%Y-%m-%d')}"
-        )
+    if total_pdfs_gerados == 0:
         return HttpResponse(
-            (
-                f'Nenhum relatório PDF foi encontrado para o período de '
-                f'{data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}. '
-                f'Gere os relatórios com: {comando_geracao} e tente novamente.'
-            ),
-            status=404,
+            f'Não foi possível gerar nenhum relatório para o período de '
+            f'{data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}.',
+            status=500
         )
 
+    # Retornar ZIP
     buffer.seek(0)
     response = HttpResponse(buffer.getvalue(), content_type='application/zip')
     response['Content-Disposition'] = (
-        f'attachment; filename="pacote_relatorios_lotes_{intervalo_token}.zip"'
+        f'attachment; filename="relatorios_lotes_{intervalo_token}_{total_pdfs_gerados}_lotes.zip"'
     )
     return response
 

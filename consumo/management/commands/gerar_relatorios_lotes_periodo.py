@@ -10,7 +10,15 @@ from consumo.views import exportar_graficos_lote_pdf
 
 
 class Command(BaseCommand):
-    help = 'Gera os relatórios PDF individuais dos lotes para um período e salva em pasta dedicada.'
+    help = '''
+    [OBSOLETO - MANTIDO PARA COMPATIBILIDADE] 
+    Gera os relatórios PDF individuais dos lotes para um período e salva em pasta dedicada.
+    
+    NOTA: Este comando não é mais necessário. O endpoint web 
+    /consumo/graficos/exportar/relatorios-lotes/ agora gera automaticamente 
+    todos os relatórios no momento do download. Use o botão "Baixar todos os 
+    relatórios" na tela de gráficos gerais.
+    '''
 
     def add_arguments(self, parser):
         parser.add_argument(
