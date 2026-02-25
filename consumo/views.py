@@ -1372,11 +1372,16 @@ def baixar_relatorios_lotes_periodo_zip(request):
             total_arquivos += 1
 
     if total_arquivos == 0:
+        comando_geracao = (
+            f"python manage.py gerar_relatorios_lotes_periodo "
+            f"--data-inicio {data_inicio.strftime('%Y-%m-%d')} "
+            f"--data-fim {data_fim.strftime('%Y-%m-%d')}"
+        )
         return HttpResponse(
             (
                 f'Nenhum relatório PDF foi encontrado para o período de '
                 f'{data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}. '
-                f'Gere os relatórios individuais desse período e tente novamente.'
+                f'Gere os relatórios com: {comando_geracao} e tente novamente.'
             ),
             status=404,
         )
