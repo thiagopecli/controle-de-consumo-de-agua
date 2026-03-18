@@ -30,6 +30,7 @@ SECRET_KEY = os.getenv("SECRET_KEY", "chave-insegura-fallback")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True"
+APP_VERSION = os.getenv("APP_VERSION", "2026.03.18.1")
 
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
 
@@ -76,6 +77,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'consumo.context_processors.app_version_context',
             ],
         },
     },

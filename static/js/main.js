@@ -83,3 +83,77 @@ function formatarNumero(numero, casasDecimais = 3) {
 window.formatarData = formatarData;
 window.formatarDataHora = formatarDataHora;
 window.formatarNumero = formatarNumero;
+
+if ('serviceWorker' in navigator) {
+    let waitingWorker = null;
+    let refreshing = false;
+
+    function getAppVersion() {
+        const appVersionMeta = document.querySelector('meta[name="app-version"]');
+        return appVersionMeta ? appVersionMeta.getAttribute('content') : '1.0.0';
+    }
+
+    function showUpdateBanner() {
+        const updateBanner = document.getElementById('updateBanner');
+        const updateButton = document.getElementById('updateAppButton');
+
+        if (!updateBanner || !updateButton) {
+            return;
+        }
+
+        updateBanner.hidden = false;
+        updateButton.onclick = function() {
+            if (waitingWorker) {
+                waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+            }
+        };
+    }
+
+    function monitorNewServiceWorker(registration) {
+        if (!registration) {
+            return;
+        }
+
+        if (registration.waiting) {
+            waitingWorker = registration.waiting;
+            showUpdateBanner();
+            return;
+        }
+
+        registration.addEventListener('updatefound', function() {
+            const installingWorker = registration.installing;
+            if (!installingWorker) {
+                return;
+            }
+
+            installingWorker.addEventListener('statechange', function() {
+                if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    waitingWorker = installingWorker;
+                    showUpdateBanner();
+                }
+            });
+        });
+    }
+
+    window.addEventListener('load', function() {
+        const appVersion = encodeURIComponent(getAppVersion());
+        navigator.serviceWorker.register(`/service-worker.js?v=${appVersion}`).then(function(registration) {
+            monitorNewServiceWorker(registration);
+
+            setInterval(function() {
+                registration.update();
+            }, 60000);
+        }).catch(function(error) {
+            console.warn('Falha ao registrar service worker:', error);
+        });
+
+        navigator.serviceWorker.addEventListener('controllerchange', function() {
+            if (refreshing) {
+                return;
+            }
+
+            refreshing = true;
+            window.location.reload();
+        });
+    });
+}

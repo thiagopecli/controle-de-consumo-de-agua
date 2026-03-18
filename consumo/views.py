@@ -315,6 +315,23 @@ def dashboard(request):
     return render(request, 'consumo/dashboard.html', context)
 
 
+def offline_page(request):
+    """Página exibida quando o usuário está sem conexão"""
+    return render(request, 'consumo/offline.html')
+
+
+def service_worker(request):
+    """Entrega o service worker na raiz para permitir escopo global"""
+    response = render(
+        request,
+        'consumo/service-worker.js',
+        {'app_version': getattr(settings, 'APP_VERSION', '1.0.0')},
+        content_type='application/javascript'
+    )
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return response
+
+
 def listar_hidrometros(request):
     """Lista todos os hidrômetros com paginação"""
     from django.core.paginator import Paginator

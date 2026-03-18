@@ -12,6 +12,8 @@ app_name = 'consumo'
 urlpatterns = [
     # API endpoints
     path('api/', include(router.urls)),
+    path('service-worker.js', views.service_worker, name='service_worker'),
+    path('offline/', views.offline_page, name='offline_page'),
     
     # Views HTML
     path('', views.dashboard, name='dashboard'),
