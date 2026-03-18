@@ -302,9 +302,17 @@ def dashboard(request):
     """Dashboard principal"""
     total_lotes = Lote.objects.filter(ativo=True).count()
     total_hidrometros = Hidrometro.objects.filter(ativo=True).count()
-    
-    hoje = timezone.now().date()
-    leituras_hoje = Leitura.objects.filter(data_leitura__date=hoje).count()
+
+    hoje = timezone.localdate()
+    inicio_dia = timezone.make_aware(
+        datetime.combine(hoje, datetime.min.time()),
+        timezone.get_current_timezone()
+    )
+    fim_dia = inicio_dia + timedelta(days=1)
+    leituras_hoje = Leitura.objects.filter(
+        data_leitura__gte=inicio_dia,
+        data_leitura__lt=fim_dia,
+    ).count()
     
     context = {
         'total_lotes': total_lotes,
@@ -335,16 +343,26 @@ def service_worker(request):
 def listar_hidrometros(request):
     """Lista todos os hidrômetros com paginação"""
     from django.core.paginator import Paginator
-    
-    agora = timezone.localtime(timezone.now())
-    hoje = agora.date()
+
+    hoje = timezone.localdate()
+    inicio_dia = timezone.make_aware(
+        datetime.combine(hoje, datetime.min.time()),
+        timezone.get_current_timezone()
+    )
+    fim_dia = inicio_dia + timedelta(days=1)
     
     # Query base
     hidrometros_list = (
         Hidrometro.objects.filter(ativo=True)
         .select_related('lote')
         .annotate(
-            leituras_hoje=Count('leituras', filter=Q(leituras__data_leitura__date=hoje)),
+            leituras_hoje=Count(
+                'leituras',
+                filter=Q(
+                    leituras__data_leitura__gte=inicio_dia,
+                    leituras__data_leitura__lt=fim_dia,
+                ),
+            ),
             ultima_leitura=Max('leituras__data_leitura'),
             # Cria um campo de ordenação: administração = 0, residencial = 1
             ordem_tipo=Case(
@@ -453,7 +471,7 @@ def detalhes_hidrometro(request, hidrometro_id):
     data_inicio_str = request.GET.get('data_inicio', '')
     data_fim_str = request.GET.get('data_fim', '')
     
-    hoje = timezone.now().date()
+    hoje = timezone.localdate()
     data_inicio = None
     data_fim = hoje
     periodo_label = ''
@@ -795,7 +813,7 @@ def graficos_lote(request, lote_id):
     data_inicio_str = request.GET.get('data_inicio', '')
     data_fim_str = request.GET.get('data_fim', '')
     
-    hoje = timezone.now().date()
+    hoje = timezone.localdate()
     data_inicio = None
     data_fim = hoje
     periodo_label = ''

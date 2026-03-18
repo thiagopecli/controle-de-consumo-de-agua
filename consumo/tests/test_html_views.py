@@ -2,6 +2,8 @@ import io
 import os
 import tempfile
 import zipfile
+from datetime import datetime, timezone as dt_timezone
+from unittest.mock import patch
 
 from django.test import TestCase
 from django.test import override_settings
@@ -30,6 +32,28 @@ class HtmlViewsSmokeTests(TestCase):
         resp = self.client.get(reverse('consumo:dashboard'))
         self.assertEqual(resp.status_code, 200)
         self.assertIn('total_lotes', resp.context)
+
+    @override_settings(TIME_ZONE='America/Sao_Paulo', USE_TZ=True)
+    def test_dashboard_leituras_hoje_respeita_fuso_local(self):
+        # Simula 21:30 do dia local (UTC já virou para o dia seguinte).
+        agora_utc = datetime(2026, 3, 19, 0, 30, tzinfo=dt_timezone.utc)
+        data_leitura_local = timezone.make_aware(
+            datetime(2026, 3, 18, 8, 0),
+            timezone.get_current_timezone(),
+        )
+
+        Leitura.objects.create(
+            hidrometro=self.h,
+            leitura=2,
+            periodo='tarde',
+            data_leitura=data_leitura_local,
+        )
+
+        with patch('consumo.views.timezone.now', return_value=agora_utc):
+            resp = self.client.get(reverse('consumo:dashboard'))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context['leituras_hoje'], 2)
 
     def test_listar_hidrometros(self):
         resp = self.client.get(reverse('consumo:listar_hidrometros'))

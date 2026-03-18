@@ -275,6 +275,17 @@ function extrairTextoErroApi(data, fallback) {
     return JSON.stringify(data);
 }
 
+function erroIndicaLeituraDuplicada(erroTexto) {
+    const texto = String(erroTexto || '').toLowerCase();
+    return (
+        texto.includes('set único') ||
+        texto.includes('set unico') ||
+        texto.includes('must make a unique set') ||
+        texto.includes('already exists') ||
+        texto.includes('unique')
+    );
+}
+
 function converterArquivoParaDataUrl(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -408,6 +419,7 @@ async function sincronizarPendencias() {
         }
 
         let enviadas = 0;
+        let duplicadasIgnoradas = 0;
 
         for (const item of pendentes) {
             const resultado = await enviarLeituraParaApi(item.payload);
@@ -415,6 +427,12 @@ async function sincronizarPendencias() {
             if (resultado.ok) {
                 await removerLeituraPendente(item.id);
                 enviadas += 1;
+                continue;
+            }
+
+            if (resultado.status >= 400 && resultado.status < 500 && erroIndicaLeituraDuplicada(resultado.erro)) {
+                await removerLeituraPendente(item.id);
+                duplicadasIgnoradas += 1;
                 continue;
             }
 
@@ -429,7 +447,11 @@ async function sincronizarPendencias() {
         }
 
         if (enviadas > 0) {
-            exibirMensagem('alert alert-success', `✅ ${enviadas} leitura(s) pendente(s) sincronizada(s) com sucesso!`);
+            exibirMensagem('alert-success', `✅ ${enviadas} leitura(s) pendente(s) sincronizada(s) com sucesso!`);
+        }
+
+        if (duplicadasIgnoradas > 0) {
+            exibirMensagem('alert-warning', `ℹ️ ${duplicadasIgnoradas} leitura(s) pendente(s) já existiam no servidor e foram removidas da fila local.`, 9000);
         }
     } catch (error) {
         // Falhas de rede/IndexedDB são silenciosas para evitar ruído quando não há internet.
