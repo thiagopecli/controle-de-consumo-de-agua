@@ -67,6 +67,20 @@
         </form>
         
         <div id="mensagem" class="alert" style="display: none;"></div>
+
+        <div class="sync-status-panel" id="syncStatusPanel" aria-live="polite">
+            <div class="sync-status-row">
+                <strong>Status da conexão:</strong>
+                <span id="connectionStatus" class="sync-chip sync-chip-online">Online</span>
+            </div>
+            <div class="sync-status-row">
+                <strong>Leituras pendentes no aparelho:</strong>
+                <span id="pendingCount">0</span>
+            </div>
+            <div class="sync-status-actions">
+                <button type="button" id="syncNowButton" class="btn btn-secondary">Sincronizar agora</button>
+            </div>
+        </div>
     </div>
     
     <div class="info-box">
@@ -75,12 +89,17 @@
             <li>Preencha todos os campos obrigatórios marcados com *</li>
             <li>A leitura deve ser em metros cúbicos (m³)</li>
             <li>A foto é opcional mas recomendada para registro</li>
+            <li>Sem internet, a leitura fica salva no aparelho e é enviada automaticamente quando voltar o sinal</li>
         </ul>
     </div>
 </div>
 
 <script>
-// Função para obter cookie CSRF
+const OFFLINE_DB_NAME = 'controle_agua_offline';
+const OFFLINE_DB_VERSION = 1;
+const OFFLINE_STORE = 'leituras_pendentes';
+let sincronizacaoEmAndamento = false;
+
 function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
@@ -96,151 +115,445 @@ function getCookie(name) {
     return cookieValue;
 }
 
-// Definir data e hora atual ao carregar a página
-document.addEventListener('DOMContentLoaded', function() {
-    const now = new Date();
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    const dataLeituraInput = document.getElementById('data_leitura');
-    dataLeituraInput.value = now.toISOString().slice(0, 16);
+function obterTokenCsrf() {
+    return document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken');
+}
 
-    function definirPeriodoPorHorario(valorDataHora) {
-        if (!valorDataHora) {
-            return;
-        }
-        const partes = valorDataHora.split('T');
-        if (partes.length < 2) {
-            return;
-        }
-        const hora = parseInt(partes[1].split(':')[0], 10);
-        if (Number.isNaN(hora)) {
-            return;
-        }
-        document.getElementById('periodo').value = hora < 12 ? 'manha' : 'tarde';
+function abrirBancoOffline() {
+    return new Promise((resolve, reject) => {
+        const request = window.indexedDB.open(OFFLINE_DB_NAME, OFFLINE_DB_VERSION);
+
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains(OFFLINE_STORE)) {
+                const store = db.createObjectStore(OFFLINE_STORE, { keyPath: 'id' });
+                store.createIndex('status', 'status', { unique: false });
+                store.createIndex('criado_em', 'criado_em', { unique: false });
+            }
+        };
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error('Falha ao abrir banco local.'));
+    });
+}
+
+async function adicionarLeituraPendente(item) {
+    const db = await abrirBancoOffline();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(OFFLINE_STORE, 'readwrite');
+        tx.objectStore(OFFLINE_STORE).put(item);
+        tx.oncomplete = () => {
+            db.close();
+            resolve();
+        };
+        tx.onerror = () => {
+            db.close();
+            reject(tx.error || new Error('Falha ao salvar leitura offline.'));
+        };
+    });
+}
+
+async function listarLeiturasPendentes() {
+    const db = await abrirBancoOffline();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(OFFLINE_STORE, 'readonly');
+        const request = tx.objectStore(OFFLINE_STORE).getAll();
+
+        request.onsuccess = () => {
+            db.close();
+            const itens = request.result || [];
+            const pendentes = itens
+                .filter((item) => item.status === 'pendente')
+                .sort((a, b) => new Date(a.criado_em) - new Date(b.criado_em));
+            resolve(pendentes);
+        };
+
+        request.onerror = () => {
+            db.close();
+            reject(request.error || new Error('Falha ao listar leituras pendentes.'));
+        };
+    });
+}
+
+async function contarLeiturasPendentes() {
+    const pendentes = await listarLeiturasPendentes();
+    return pendentes.length;
+}
+
+async function removerLeituraPendente(id) {
+    const db = await abrirBancoOffline();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(OFFLINE_STORE, 'readwrite');
+        tx.objectStore(OFFLINE_STORE).delete(id);
+        tx.oncomplete = () => {
+            db.close();
+            resolve();
+        };
+        tx.onerror = () => {
+            db.close();
+            reject(tx.error || new Error('Falha ao remover leitura da fila local.'));
+        };
+    });
+}
+
+function exibirMensagem(tipo, texto, timeout = 6000) {
+    const mensagemDiv = document.getElementById('mensagem');
+    mensagemDiv.className = `alert ${tipo}`;
+    mensagemDiv.textContent = texto;
+    mensagemDiv.style.display = 'block';
+
+    if (timeout > 0) {
+        setTimeout(() => {
+            mensagemDiv.style.display = 'none';
+        }, timeout);
+    }
+}
+
+function atualizarStatusConexao() {
+    const connectionStatus = document.getElementById('connectionStatus');
+    if (!connectionStatus) {
+        return;
     }
 
-    definirPeriodoPorHorario(dataLeituraInput.value);
-    dataLeituraInput.addEventListener('change', function() {
-        definirPeriodoPorHorario(this.value);
+    if (navigator.onLine) {
+        connectionStatus.className = 'sync-chip sync-chip-online';
+        connectionStatus.textContent = 'Online';
+    } else {
+        connectionStatus.className = 'sync-chip sync-chip-offline';
+        connectionStatus.textContent = 'Offline';
+    }
+}
+
+async function atualizarContadorPendentes() {
+    const pendingCount = document.getElementById('pendingCount');
+    if (!pendingCount) {
+        return;
+    }
+
+    try {
+        const total = await contarLeiturasPendentes();
+        pendingCount.textContent = String(total);
+    } catch (error) {
+        pendingCount.textContent = '-';
+    }
+}
+
+function dataHoraAtualLocal() {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    return now.toISOString().slice(0, 16);
+}
+
+function definirPeriodoPorHorario(valorDataHora) {
+    if (!valorDataHora) {
+        return;
+    }
+    const partes = valorDataHora.split('T');
+    if (partes.length < 2) {
+        return;
+    }
+    const hora = parseInt(partes[1].split(':')[0], 10);
+    if (Number.isNaN(hora)) {
+        return;
+    }
+    document.getElementById('periodo').value = hora < 12 ? 'manha' : 'tarde';
+}
+
+function extrairTextoErroApi(data, fallback) {
+    if (!data) {
+        return fallback;
+    }
+    if (typeof data === 'string') {
+        return data;
+    }
+    if (data.detail) {
+        return data.detail;
+    }
+    if (data.error) {
+        return data.error;
+    }
+    return JSON.stringify(data);
+}
+
+function converterArquivoParaDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Não foi possível ler a foto para salvar offline.'));
+        reader.readAsDataURL(file);
     });
-    
-    // Formatar campo de leitura com vírgula
+}
+
+function converterDataUrlParaBlob(dataUrl) {
+    const partes = dataUrl.split(',');
+    const mimeMatch = partes[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+    const binario = atob(partes[1]);
+    const tamanho = binario.length;
+    const bytes = new Uint8Array(tamanho);
+
+    for (let i = 0; i < tamanho; i++) {
+        bytes[i] = binario.charCodeAt(i);
+    }
+
+    return new Blob([bytes], { type: mime });
+}
+
+async function montarPayloadFormulario() {
+    const hidrometro = document.getElementById('hidrometro').value;
+    const leituraCampo = document.getElementById('leitura').value;
+    const leituraValor = leituraCampo.replace(',', '.');
+    const leituraNum = parseFloat(leituraValor);
+
+    if (!hidrometro) {
+        throw new Error('Selecione um hidrômetro antes de salvar.');
+    }
+
+    if (Number.isNaN(leituraNum) || leituraNum < 0) {
+        throw new Error('Informe um valor válido para a leitura.');
+    }
+
+    if (leituraNum > 99999) {
+        throw new Error('O valor da leitura não pode ser maior que 99999 m³.');
+    }
+
+    const payload = {
+        hidrometro,
+        leitura: leituraValor,
+        data_leitura: document.getElementById('data_leitura').value,
+        periodo: document.getElementById('periodo').value,
+        responsavel: document.getElementById('responsavel').value,
+        observacoes: document.getElementById('observacoes').value
+    };
+
+    const foto = document.getElementById('foto').files[0];
+    if (foto) {
+        payload.foto_nome = foto.name;
+        payload.foto_tipo = foto.type || 'image/jpeg';
+        payload.foto_data_url = await converterArquivoParaDataUrl(foto);
+    }
+
+    return payload;
+}
+
+function construirFormDataLeitura(payload) {
+    const formData = new FormData();
+    formData.append('hidrometro', payload.hidrometro);
+    formData.append('leitura', payload.leitura);
+    formData.append('data_leitura', payload.data_leitura);
+    formData.append('periodo', payload.periodo);
+    formData.append('responsavel', payload.responsavel || '');
+    formData.append('observacoes', payload.observacoes || '');
+
+    if (payload.foto_data_url) {
+        const blobFoto = converterDataUrlParaBlob(payload.foto_data_url);
+        formData.append('foto', blobFoto, payload.foto_nome || 'leitura-offline.jpg');
+    }
+
+    return formData;
+}
+
+async function enviarLeituraParaApi(payload) {
+    const response = await fetch('/api/leituras/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': obterTokenCsrf()
+        },
+        body: construirFormDataLeitura(payload)
+    });
+
+    let data = null;
+    try {
+        data = await response.json();
+    } catch (error) {
+        data = null;
+    }
+
+    if (!response.ok) {
+        const erro = extrairTextoErroApi(data, 'Falha ao registrar leitura.');
+        return { ok: false, status: response.status, erro };
+    }
+
+    return { ok: true, data };
+}
+
+async function salvarLeituraOffline(payload) {
+    const id = (window.crypto && window.crypto.randomUUID)
+        ? window.crypto.randomUUID()
+        : `offline-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+
+    const registro = {
+        id,
+        status: 'pendente',
+        criado_em: new Date().toISOString(),
+        tentativas: 0,
+        payload
+    };
+
+    await adicionarLeituraPendente(registro);
+    await atualizarContadorPendentes();
+}
+
+async function sincronizarPendencias() {
+    if (sincronizacaoEmAndamento || !navigator.onLine) {
+        return;
+    }
+
+    sincronizacaoEmAndamento = true;
+
+    try {
+        const pendentes = await listarLeiturasPendentes();
+        if (!pendentes.length) {
+            return;
+        }
+
+        let enviadas = 0;
+
+        for (const item of pendentes) {
+            const resultado = await enviarLeituraParaApi(item.payload);
+
+            if (resultado.ok) {
+                await removerLeituraPendente(item.id);
+                enviadas += 1;
+                continue;
+            }
+
+            // Falhas de validação devem ser corrigidas manualmente e permanecem na fila.
+            if (resultado.status >= 400 && resultado.status < 500) {
+                exibirMensagem('alert-error', `⚠️ Uma leitura pendente precisa de revisão: ${resultado.erro}`, 9000);
+                break;
+            }
+
+            // Em caso de indisponibilidade temporária, interrompe para tentar novamente depois.
+            break;
+        }
+
+        if (enviadas > 0) {
+            exibirMensagem('alert alert-success', `✅ ${enviadas} leitura(s) pendente(s) sincronizada(s) com sucesso!`);
+        }
+    } catch (error) {
+        // Falhas de rede/IndexedDB são silenciosas para evitar ruído quando não há internet.
+    } finally {
+        sincronizacaoEmAndamento = false;
+        await atualizarContadorPendentes();
+    }
+}
+
+function resetarFormularioLeitura() {
+    const form = document.getElementById('leituraForm');
+    form.reset();
+
+    const dataLeituraInput = document.getElementById('data_leitura');
+    dataLeituraInput.value = dataHoraAtualLocal();
+    definirPeriodoPorHorario(dataLeituraInput.value);
+}
+
+function configurarFormatacaoCampoLeitura() {
     const leituraInput = document.getElementById('leitura');
-    
-    leituraInput.addEventListener('input', function(e) {
+
+    leituraInput.addEventListener('input', function() {
         let valor = this.value;
-        
-        // Remove tudo exceto números e vírgula
         valor = valor.replace(/[^\d,]/g, '');
-        
-        // Permite apenas uma vírgula
+
         const partes = valor.split(',');
         if (partes.length > 2) {
             valor = partes[0] + ',' + partes.slice(1).join('');
         }
-        
-        // Limita a 5 dígitos antes da vírgula
+
         if (partes[0] && partes[0].length > 5) {
             partes[0] = partes[0].substring(0, 5);
             valor = partes.join(',');
         }
-        
-        // Limita a 3 dígitos após a vírgula
+
         if (partes[1] && partes[1].length > 3) {
             partes[1] = partes[1].substring(0, 3);
             valor = partes.join(',');
         }
-        
+
         this.value = valor;
-        
-        // Valida se o valor não excede 99999
+
         const valorNumerico = parseFloat(valor.replace(',', '.'));
         if (valorNumerico > 99999) {
             this.value = '99999';
             alert('⚠️ O valor máximo permitido é 99999 m³');
         }
     });
-    
-    // Adiciona vírgula automaticamente se só digitar números inteiros
+
     leituraInput.addEventListener('blur', function() {
         if (this.value && !this.value.includes(',')) {
             this.value = this.value + ',000';
         }
     });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const dataLeituraInput = document.getElementById('data_leitura');
+    dataLeituraInput.value = dataHoraAtualLocal();
+    definirPeriodoPorHorario(dataLeituraInput.value);
+    dataLeituraInput.addEventListener('change', function() {
+        definirPeriodoPorHorario(this.value);
+    });
+
+    configurarFormatacaoCampoLeitura();
+    atualizarStatusConexao();
+    atualizarContadorPendentes();
+
+    const syncNowButton = document.getElementById('syncNowButton');
+    if (syncNowButton) {
+        syncNowButton.addEventListener('click', async function() {
+            if (!navigator.onLine) {
+                exibirMensagem('alert-warning', '📴 Você está offline. A sincronização ocorrerá automaticamente quando a internet voltar.');
+                return;
+            }
+            await sincronizarPendencias();
+        });
+    }
+
+    window.addEventListener('online', async function() {
+        atualizarStatusConexao();
+        await sincronizarPendencias();
+    });
+
+    window.addEventListener('offline', function() {
+        atualizarStatusConexao();
+    });
+
+    // Tenta sincronizar periodicamente para cenários de instabilidade de rede.
+    setInterval(function() {
+        if (navigator.onLine) {
+            sincronizarPendencias();
+        }
+    }, 60000);
+
+    sincronizarPendencias();
 });
 
-// Submeter formulário
 document.getElementById('leituraForm').addEventListener('submit', async function(e) {
     e.preventDefault();
-    
-    // Pegar e converter valor da leitura (vírgula para ponto)
-    let leituraValor = document.getElementById('leitura').value.replace(',', '.');
-    const leituraNum = parseFloat(leituraValor);
-    
-    // Validar leitura antes de enviar
-    if (isNaN(leituraNum) || leituraNum < 0) {
-        alert('❌ Erro: Informe um valor válido para a leitura');
-        return;
-    }
-    
-    if (leituraNum > 99999) {
-        alert('❌ Erro: O valor da leitura não pode ser maior que 99999 m³');
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('hidrometro', document.getElementById('hidrometro').value);
-    formData.append('leitura', leituraValor);  // Envia com ponto decimal
-    formData.append('data_leitura', document.getElementById('data_leitura').value);
-    formData.append('periodo', document.getElementById('periodo').value);
-    formData.append('responsavel', document.getElementById('responsavel').value);
-    formData.append('observacoes', document.getElementById('observacoes').value);
-    
-    const foto = document.getElementById('foto').files[0];
-    if (foto) {
-        formData.append('foto', foto);
-    }
-    
-    // Obter CSRF token
-    const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
-                      getCookie('csrftoken');
-    
+
     try {
-        const response = await fetch('/api/leituras/', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': csrftoken
-            },
-            body: formData
-        });
-        
-        const data = await response.json();
-        const mensagemDiv = document.getElementById('mensagem');
-        
-        if (response.ok) {
-            mensagemDiv.className = 'alert alert-success';
-            mensagemDiv.textContent = '✅ Leitura registrada com sucesso!';
-            mensagemDiv.style.display = 'block';
-            document.getElementById('leituraForm').reset();
-            
-            // Redefinir data/hora atual
-            const now = new Date();
-            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-            document.getElementById('data_leitura').value = now.toISOString().slice(0, 16);
-        } else {
-            mensagemDiv.className = 'alert alert-error';
-            mensagemDiv.textContent = '❌ Erro ao registrar leitura: ' + JSON.stringify(data);
-            mensagemDiv.style.display = 'block';
+        const payload = await montarPayloadFormulario();
+
+        if (navigator.onLine) {
+            const resultado = await enviarLeituraParaApi(payload);
+            if (resultado.ok) {
+                exibirMensagem('alert-success', '✅ Leitura registrada com sucesso!');
+                resetarFormularioLeitura();
+                await sincronizarPendencias();
+                return;
+            }
+
+            if (resultado.status >= 400 && resultado.status < 500) {
+                exibirMensagem('alert-error', `❌ Erro ao registrar leitura: ${resultado.erro}`);
+                return;
+            }
         }
-        
-        setTimeout(() => {
-            mensagemDiv.style.display = 'none';
-        }, 5000);
-        
+
+        await salvarLeituraOffline(payload);
+        exibirMensagem('alert-warning', '📥 Sem internet no momento. Leitura salva no aparelho e será sincronizada automaticamente quando a conexão voltar.', 8000);
+        resetarFormularioLeitura();
     } catch (error) {
-        const mensagemDiv = document.getElementById('mensagem');
-        mensagemDiv.className = 'alert alert-error';
-        mensagemDiv.textContent = '❌ Erro ao conectar com o servidor: ' + error.message;
-        mensagemDiv.style.display = 'block';
+        exibirMensagem('alert-error', `❌ ${error.message || 'Não foi possível registrar a leitura.'}`);
     }
 });
 </script>

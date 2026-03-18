@@ -59,6 +59,25 @@ canvas {
     z-index: 1000;
 }
 
+.update-banner {
+    background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+    color: #1f2937;
+    padding: 0.7rem 0;
+    position: sticky;
+    top: 0;
+    z-index: 1100;
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.update-banner-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    font-weight: 600;
+}
+
 .navbar .container {
     display: flex;
     flex-direction: row;
@@ -674,6 +693,56 @@ canvas {
     border-left: 4px solid var(--danger-color);
 }
 
+.alert-warning {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #78350f;
+    border-left: 4px solid var(--warning-color);
+}
+
+.sync-status-panel {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: #f8fdff;
+    display: grid;
+    gap: 0.75rem;
+}
+
+.sync-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.sync-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 88px;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.sync-chip-online {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.sync-chip-offline {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.sync-status-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
 /* Charts */
 .charts-grid {
     display: grid;
@@ -1056,6 +1125,27 @@ canvas {
     }
 
     .form-actions .btn {
+        width: 100%;
+    }
+
+    .sync-status-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .sync-status-actions {
+        width: 100%;
+    }
+
+    .sync-status-actions .btn {
+        width: 100%;
+    }
+
+    .update-banner-content {
+        align-items: flex-start;
+    }
+
+    .update-banner-content .btn {
         width: 100%;
     }
 }
