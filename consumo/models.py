@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from datetime import timedelta
 
 
 class Lote(models.Model):
@@ -115,8 +116,12 @@ class Hidrometro(models.Model):
     def consumo_diario_atual(self):
         """Retorna o consumo do dia atual em m³"""
         from django.utils import timezone
-        hoje = timezone.now().date()
-        leituras_hoje = self.leituras.filter(data_leitura__date=hoje).order_by('data_leitura')
+        inicio_dia = timezone.localtime(timezone.now()).replace(hour=0, minute=0, second=0, microsecond=0)
+        fim_dia = inicio_dia + timedelta(days=1)
+        leituras_hoje = self.leituras.filter(
+            data_leitura__gte=inicio_dia,
+            data_leitura__lt=fim_dia,
+        ).order_by('data_leitura')
         
         if leituras_hoje.count() >= 2:
             primeira = leituras_hoje.first()
