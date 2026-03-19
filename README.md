@@ -306,11 +306,16 @@ curl "http://localhost:8000/api/leituras/?data_inicio=2026-01-01&data_fim=2026-0
 
 - Comando mensal automático: `python manage.py enviar_whatsapp_mensal`
 - Período enviado: do dia 1 até o dia da execução (ex.: dia 20 do mês)
-- Template Twilio usado: `TWILIO_CONTENT_SID` com variáveis `{{1}}..{{5}}`
+- Provedor usado: **Z-API** (`https://app.z-api.io/app`)
+- Formato de destino aceito: `+55...` ou `55...` (somente dígitos também funciona)
 - Simulação sem envio real: `python manage.py enviar_whatsapp_mensal --dry-run --data-referencia 2026-02-20`
+- Envio com PDF (com fallback para texto): `python manage.py enviar_whatsapp_mensal --enviar-pdf`
+- Envio com PDF sem fallback: `python manage.py enviar_whatsapp_mensal --enviar-pdf --sem-fallback-texto`
+- Teste isolado com PDF: `python manage.py enviar_whatsapp_teste --enviar-pdf --to 55219SEUNUMERO --pdf-url https://SEU_DOMINIO/lotes/1/graficos/exportar/pdf/?periodo=ano_atual`
 - Agendamento em produção: serviço `cron` no [render.yaml](render.yaml) com schedule `0 11 20 * *` (08:00 no horário de Brasília)
 - Observação de fuso: o Render agenda em UTC; por isso `0 11 20 * *` equivale a 08:00 em Brasília.
-- Variáveis obrigatórias no ambiente do cron: `DATABASE_URL`, `APP_BASE_URL`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_CONTENT_SID`, `TWILIO_WHATSAPP_FROM`, `TWILIO_WHATSAPP_TO`
+- Variáveis obrigatórias no ambiente do cron: `DATABASE_URL`, `APP_BASE_URL`, `ZAPI_INSTANCE_ID`, `ZAPI_INSTANCE_TOKEN`, `ZAPI_CLIENT_TOKEN`
+- Variável opcional no ambiente do cron: `ZAPI_WHATSAPP_TO` (destino padrão)
 
 ## 🚀 Próximos Passos
 

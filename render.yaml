@@ -63,13 +63,11 @@ services:
           property: connectionString
       - key: APP_BASE_URL
         sync: false
-      - key: TWILIO_ACCOUNT_SID
+      - key: ZAPI_INSTANCE_ID
         sync: false
-      - key: TWILIO_AUTH_TOKEN
+      - key: ZAPI_INSTANCE_TOKEN
         sync: false
-      - key: TWILIO_CONTENT_SID
+      - key: ZAPI_CLIENT_TOKEN
         sync: false
-      - key: TWILIO_WHATSAPP_FROM
-        sync: false
-      - key: TWILIO_WHATSAPP_TO
+      - key: ZAPI_WHATSAPP_TO
         sync: false
