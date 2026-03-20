@@ -65,64 +65,70 @@ class Command(BaseCommand):
             consumo_litros = self._calcular_consumo_lote_litros(lote, data_inicio, data_fim)
             url_relatorio = self._montar_url_relatorio(lote.id)
             url_pdf = self._montar_url_relatorio_pdf(lote.id, data_inicio, data_fim)
-            destino_lote = self._resolver_destino_lote(lote, options["to_whatsapp"])
+            destinos_lote = self._resolver_destinos_lote(lote, options["to_whatsapp"])
 
-            if not destino_lote:
+            if not destinos_lote:
                 ignorados_sem_whatsapp += 1
                 self.stdout.write(
                     self.style.WARNING(
-                        f"[AVISO] Lote {lote.numero} sem WhatsApp cadastrado. Cadastre em Lote.telefone_whatsapp"
+                        f"[AVISO] Lote {lote.numero} sem WhatsApp cadastrado. Cadastre em Lote.telefone_whatsapp e/ou Lote.telefone_whatsapp_2"
                     )
                 )
                 continue
 
             if options["dry_run"]:
-                self.stdout.write(
-                    f"[DRY-RUN] Lote {lote.numero} | WhatsApp: {destino_lote} | Consumo: {consumo_litros}L | URL: {url_relatorio} | PDF: {url_pdf}"
-                )
+                for destino_lote in destinos_lote:
+                    self.stdout.write(
+                        f"[DRY-RUN] Lote {lote.numero} | WhatsApp: {destino_lote} | Consumo: {consumo_litros}L | URL: {url_relatorio} | PDF: {url_pdf}"
+                    )
                 enviados += 1
                 continue
 
-            try:
-                if options["enviar_pdf"]:
-                    resultado = enviar_relatorio_pdf_whatsapp(
-                        lote=lote.numero,
-                        data_inicio=data_inicio.strftime("%d/%m/%Y"),
-                        data_fim=data_fim.strftime("%d/%m/%Y"),
-                        consumo_litros=consumo_litros,
-                        url_relatorio=url_relatorio,
-                        url_pdf=url_pdf,
-                        to_whatsapp=destino_lote,
-                        fallback_texto=not options["sem_fallback_texto"],
-                    )
-                else:
-                    resultado = enviar_resumo_consumo_whatsapp(
-                        lote=lote.numero,
-                        data_inicio=data_inicio.strftime("%d/%m/%Y"),
-                        data_fim=data_fim.strftime("%d/%m/%Y"),
-                        consumo_litros=consumo_litros,
-                        url_relatorio=url_relatorio,
-                        to_whatsapp=destino_lote,
-                    )
-                enviados += 1
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f"[OK] Lote {lote.numero} enviado | Tipo: {resultado.get('tipo', 'texto')} | SID: {resultado['sid']} | status: {resultado['status']}"
-                    )
-                )
-                if resultado.get("erro_pdf"):
+            envio_ok_lote = False
+            for destino_lote in destinos_lote:
+                try:
+                    if options["enviar_pdf"]:
+                        resultado = enviar_relatorio_pdf_whatsapp(
+                            lote=lote.numero,
+                            data_inicio=data_inicio.strftime("%d/%m/%Y"),
+                            data_fim=data_fim.strftime("%d/%m/%Y"),
+                            consumo_litros=consumo_litros,
+                            url_relatorio=url_relatorio,
+                            url_pdf=url_pdf,
+                            to_whatsapp=destino_lote,
+                            fallback_texto=not options["sem_fallback_texto"],
+                        )
+                    else:
+                        resultado = enviar_resumo_consumo_whatsapp(
+                            lote=lote.numero,
+                            data_inicio=data_inicio.strftime("%d/%m/%Y"),
+                            data_fim=data_fim.strftime("%d/%m/%Y"),
+                            consumo_litros=consumo_litros,
+                            url_relatorio=url_relatorio,
+                            to_whatsapp=destino_lote,
+                        )
+                    envio_ok_lote = True
                     self.stdout.write(
-                        self.style.WARNING(
-                            f"[AVISO] Lote {lote.numero}: PDF falhou e foi enviado texto. Erro: {resultado['erro_pdf']}"
+                        self.style.SUCCESS(
+                            f"[OK] Lote {lote.numero} enviado para {destino_lote} | Tipo: {resultado.get('tipo', 'texto')} | SID: {resultado['sid']} | status: {resultado['status']}"
                         )
                     )
-            except ConfiguracaoWhatsAppInvalida as exc:
-                raise CommandError(str(exc)) from exc
-            except Exception as exc:
-                falhas += 1
-                self.stdout.write(
-                    self.style.ERROR(f"[ERRO] Lote {lote.numero} falhou: {exc}")
-                )
+                    if resultado.get("erro_pdf"):
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f"[AVISO] Lote {lote.numero}: PDF falhou e foi enviado texto. Erro: {resultado['erro_pdf']}"
+                            )
+                        )
+                except ConfiguracaoWhatsAppInvalida as exc:
+                    raise CommandError(str(exc)) from exc
+                except Exception as exc:
+                    falhas += 1
+                    self.stdout.write(
+                        self.style.ERROR(f"[ERRO] Lote {lote.numero} para {destino_lote} falhou: {exc}")
+                    )
+
+            if envio_ok_lote:
+                enviados += 1
 
         self.stdout.write(
             self.style.SUCCESS(
@@ -133,15 +139,24 @@ class Command(BaseCommand):
         if falhas > 0:
             raise CommandError("Execução finalizada com falhas. Verifique os erros acima.")
 
-    def _resolver_destino_lote(self, lote, destino_forcado=None):
+    def _resolver_destinos_lote(self, lote, destino_forcado=None):
         if destino_forcado:
-            return normalizar_numero_whatsapp(destino_forcado)
+            return [normalizar_numero_whatsapp(destino_forcado)]
 
-        telefone = (lote.telefone_whatsapp or "").strip()
-        if not telefone:
-            return None
+        candidatos = [
+            (lote.telefone_whatsapp or "").strip(),
+            (getattr(lote, "telefone_whatsapp_2", "") or "").strip(),
+        ]
+        candidatos = [item for item in candidatos if item]
 
-        return normalizar_numero_whatsapp(telefone)
+        destinos = []
+        for candidato in candidatos:
+            try:
+                destinos.append(normalizar_numero_whatsapp(candidato))
+            except Exception:
+                continue
+
+        return list(dict.fromkeys(destinos))
 
     def _resolver_data_referencia(self, valor):
         if not valor:
