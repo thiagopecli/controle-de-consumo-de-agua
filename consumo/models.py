@@ -38,8 +38,15 @@ class Lote(models.Model):
         max_length=20,
         blank=True,
         null=True,
-        verbose_name='WhatsApp do Proprietário',
+        verbose_name='WhatsApp do Proprietário 1',
         help_text='Formato: +55DDDNUMERO (apenas dígitos com +, sem espaços)'
+    )
+    telefone_whatsapp_2 = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        verbose_name='WhatsApp do Proprietário 2',
+        help_text='Opcional. Formato: +55DDDNUMERO (apenas dígitos com +, sem espaços)'
     )
     ativo = models.BooleanField(
         default=True,

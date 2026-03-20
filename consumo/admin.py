@@ -8,13 +8,21 @@ from .models import Lote, Hidrometro, Leitura
 
 class LoteForm(forms.ModelForm):
     """Formulário do admin para Lote que ajuda a preencher e normalizar
-    o campo telefone_whatsapp usando o DDI do Brasil como padrão (+55).
+    os campos de WhatsApp usando o DDI do Brasil como padrão (+55).
     """
     telefone_whatsapp = forms.CharField(
         required=False,
         max_length=20,
         widget=forms.TextInput(attrs={
-            'placeholder': 'Apenas DDD + número (ex: 81991234567) — será salvo como +55...',
+            'placeholder': 'Ex: 81991234567',
+        }),
+        initial='+55'
+    )
+    telefone_whatsapp_2 = forms.CharField(
+        required=False,
+        max_length=20,
+        widget=forms.TextInput(attrs={
+            'placeholder': 'Ex: 81999887766 (opcional)',
         }),
         initial='+55'
     )
@@ -23,11 +31,7 @@ class LoteForm(forms.ModelForm):
         model = Lote
         fields = '__all__'
 
-    def clean_telefone_whatsapp(self):
-        val = (self.cleaned_data.get('telefone_whatsapp') or '').strip()
-        if not val:
-            return ''
-
+    def _normalizar_telefone(self, val):
         # Remove tudo que não for dígito
         digits = re.sub(r'\D', '', val)
 
@@ -50,13 +54,25 @@ class LoteForm(forms.ModelForm):
 
         return normalized
 
+    def clean_telefone_whatsapp(self):
+        val = (self.cleaned_data.get('telefone_whatsapp') or '').strip()
+        if not val:
+            return ''
+        return self._normalizar_telefone(val)
+
+    def clean_telefone_whatsapp_2(self):
+        val = (self.cleaned_data.get('telefone_whatsapp_2') or '').strip()
+        if not val:
+            return ''
+        return self._normalizar_telefone(val)
+
 
 @admin.register(Lote)
 class LoteAdmin(admin.ModelAdmin):
     form = LoteForm
-    list_display = ['numero', 'tipo', 'proprietario_nome', 'telefone_whatsapp', 'endereco', 'ativo', 'criado_em']
+    list_display = ['numero', 'tipo', 'proprietario_nome', 'telefone_whatsapp', 'telefone_whatsapp_2', 'endereco', 'ativo', 'criado_em']
     list_filter = ['tipo', 'ativo']
-    search_fields = ['numero', 'proprietario_nome', 'telefone_whatsapp', 'endereco']
+    search_fields = ['numero', 'proprietario_nome', 'telefone_whatsapp', 'telefone_whatsapp_2', 'endereco']
     ordering = ['numero']
 
 
