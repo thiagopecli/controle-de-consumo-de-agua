@@ -12,11 +12,24 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 from pathlib import Path
 import os
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 import dj_database_url
 
 
 load_dotenv()
+
+
+def _env_bool(nome, padrao=False):
+    valor = os.getenv(nome)
+    if valor is None:
+        return padrao
+    return str(valor).strip().lower() in {"1", "true", "yes", "on", "sim"}
+
+
+def _env_list(nome, padrao=""):
+    bruto = os.getenv(nome, padrao)
+    return [item.strip() for item in bruto.split(",") if item and item.strip()]
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,18 +38,26 @@ load_dotenv(BASE_DIR / ".env")
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("SECRET_KEY", "chave-insegura-fallback")
-
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DEBUG", "False") == "True"
+DEBUG = _env_bool("DEBUG", False)
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.getenv("SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = "dev-only-secret-key-change-me"
+    else:
+        raise ImproperlyConfigured("SECRET_KEY obrigatoria em producao")
+
 APP_VERSION = os.getenv("APP_VERSION", "2026.03.18.1")
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
+ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", "localhost,127.0.0.1")
 
 render_host = os.getenv("RENDER_EXTERNAL_HOSTNAME")
 if render_host:
     ALLOWED_HOSTS.append(render_host)
+
+ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS))
 
 # Application definition
 
@@ -148,9 +169,21 @@ USE_TZ = True
 SESSION_COOKIE_AGE = 7200  # 2 horas em segundos
 SESSION_SAVE_EVERY_REQUEST = True  # Renova sessão a cada requisição (inatividade)
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Mantém sessão após fechar navegador
-SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'False') == 'True'  # True em produção HTTPS
+SESSION_COOKIE_SECURE = _env_bool('SESSION_COOKIE_SECURE', not DEBUG)
 SESSION_COOKIE_HTTPONLY = True  # Proteção contra XSS
 SESSION_COOKIE_SAMESITE = 'Lax'  # Proteção CSRF
+
+# Security headers and HTTPS behavior
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = _env_bool('SECURE_SSL_REDIRECT', not DEBUG)
+CSRF_COOKIE_SECURE = _env_bool('CSRF_COOKIE_SECURE', not DEBUG)
+SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '31536000' if not DEBUG else '0'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool('SECURE_HSTS_INCLUDE_SUBDOMAINS', not DEBUG)
+SECURE_HSTS_PRELOAD = _env_bool('SECURE_HSTS_PRELOAD', not DEBUG)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_BROWSER_XSS_FILTER = True
+X_FRAME_OPTIONS = 'DENY'
+CSRF_TRUSTED_ORIGINS = _env_list('CSRF_TRUSTED_ORIGINS', 'http://localhost:8000,http://127.0.0.1:8000')
 
 
 # Static files (CSS, JavaScript, Images)
@@ -170,17 +203,18 @@ MEDIA_ROOT = Path(os.getenv('MEDIA_ROOT', BASE_DIR / 'media'))
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS Settings
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+CORS_ALLOWED_ORIGINS = _env_list(
+    'CORS_ALLOWED_ORIGINS',
+    'http://localhost:3000,http://127.0.0.1:3000'
+)
+
+_renderers = ['rest_framework.renderers.JSONRenderer']
+if DEBUG:
+    _renderers.append('rest_framework.renderers.BrowsableAPIRenderer')
 
 # REST Framework Settings
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 100,
-    'DEFAULT_RENDERER_CLASSES': [
-        'rest_framework.renderers.JSONRenderer',
-        'rest_framework.renderers.BrowsableAPIRenderer',
-    ]
+    'DEFAULT_RENDERER_CLASSES': _renderers,
 }
