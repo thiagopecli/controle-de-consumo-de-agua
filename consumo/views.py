@@ -27,6 +27,7 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.utils import ImageReader
 
 from .models import Lote, Hidrometro, Leitura
+from .services.relatorios_cache import calcular_data_coleta, pasta_relatorios_coleta
 from .serializers import (
     LoteSerializer, 
     HidrometroSerializer, 
@@ -1535,14 +1536,49 @@ def baixar_relatorios_lotes_periodo_zip(request):
             status=404
         )
 
+    data_coleta_ref = calcular_data_coleta(hoje_ref.date())
+    pasta_cache_ref = pasta_relatorios_coleta(data_coleta_ref)
+
+    def _buscar_pdf_pregerado(lote_numero):
+        nome_arquivo = f'relatorio_lote_{lote_numero}_{intervalo_token}.pdf'
+
+        caminho_preferencial = os.path.join(str(pasta_cache_ref), nome_arquivo)
+        if os.path.exists(caminho_preferencial):
+            return caminho_preferencial
+
+        padrao = os.path.join(str(settings.MEDIA_ROOT), 'relatorios_mensais', '*', nome_arquivo)
+        candidatos = glob.glob(padrao)
+        if candidatos:
+            candidatos.sort(reverse=True)
+            return candidatos[0]
+
+        return None
+
     # Criar ZIP em memória
     buffer = io.BytesIO()
     factory = RequestFactory()
     total_pdfs_gerados = 0
+    total_pdfs_cache = 0
+    total_pdfs_dinamicos = 0
 
     with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as arquivo_zip:
         for lote in lotes_com_leituras:
-            # Criar requisição fake para gerar o PDF do lote
+            # 1) Tenta usar PDF pregerado em disco
+            try:
+                caminho_pdf_cache = _buscar_pdf_pregerado(lote.numero)
+                nome_arquivo = f'relatorio_lote_{lote.numero}_{intervalo_token}.pdf'
+                caminho_no_zip = f'relatorios_lotes_{intervalo_token}/{nome_arquivo}'
+
+                if caminho_pdf_cache and os.path.exists(caminho_pdf_cache):
+                    with open(caminho_pdf_cache, 'rb') as arquivo_pdf:
+                        arquivo_zip.writestr(caminho_no_zip, arquivo_pdf.read())
+                    total_pdfs_gerados += 1
+                    total_pdfs_cache += 1
+                    continue
+            except Exception:
+                pass
+
+            # 2) Fallback: gera dinamicamente apenas se nao existir cache
             fake_request = factory.get(
                 f'/consumo/graficos/lote/{lote.id}/exportar/pdf/',
                 {
@@ -1551,25 +1587,20 @@ def baixar_relatorios_lotes_periodo_zip(request):
                     'data_fim': data_fim.strftime('%Y-%m-%d')
                 }
             )
-            # Copiar configurações importantes da requisição original
             fake_request.user = request.user
             fake_request.META = request.META.copy()
             fake_request.session = request.session
-            
+
             try:
-                # Gerar PDF do lote
                 response_pdf = exportar_graficos_lote_pdf(fake_request, lote.id)
-                
+
                 if response_pdf.status_code == 200:
-                    # Nome do arquivo dentro do ZIP
                     nome_arquivo = f'relatorio_lote_{lote.numero}_{intervalo_token}.pdf'
                     caminho_no_zip = f'relatorios_lotes_{intervalo_token}/{nome_arquivo}'
-                    
-                    # Adicionar PDF ao ZIP
                     arquivo_zip.writestr(caminho_no_zip, response_pdf.content)
                     total_pdfs_gerados += 1
-            except Exception as e:
-                # Continuar mesmo se um lote falhar
+                    total_pdfs_dinamicos += 1
+            except Exception:
                 continue
 
     if total_pdfs_gerados == 0:
@@ -1585,6 +1616,8 @@ def baixar_relatorios_lotes_periodo_zip(request):
     response['Content-Disposition'] = (
         f'attachment; filename="relatorios_{intervalo_token}{faixa_label}_{total_pdfs_gerados}_pdfs.zip"'
     )
+    response['X-Relatorios-Cache'] = str(total_pdfs_cache)
+    response['X-Relatorios-Dinamicos'] = str(total_pdfs_dinamicos)
     return response
 
 

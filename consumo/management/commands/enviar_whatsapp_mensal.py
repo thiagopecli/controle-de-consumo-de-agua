@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+import time
 
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
@@ -33,10 +34,17 @@ class Command(BaseCommand):
         parser.add_argument("--pasta-relatorios", default=None, help="Pasta com PDFs pregerados")
         parser.add_argument("--nao-usar-relatorios-pregerados", action="store_true", help="Desativa uso de cache")
         parser.add_argument("--obrigar-relatorios-pregerados", action="store_true", help="Falha se nao houver cache")
+        parser.add_argument(
+            "--intervalo-segundos",
+            type=float,
+            default=5.0,
+            help="Intervalo entre envios de mensagens (padrao: 5s)",
+        )
 
     def handle(self, *args, **options):
         data_referencia = self._resolver_data_referencia(options.get("data_referencia"))
         usar_relatorios_pregerados = not options["nao_usar_relatorios_pregerados"]
+        intervalo_segundos = max(0.0, float(options.get("intervalo_segundos") or 0.0))
         data_coleta = calcular_data_coleta(data_referencia)
         cache_remoto_habilitado = self._cache_remoto_habilitado()
 
@@ -86,10 +94,13 @@ class Command(BaseCommand):
         falhas = 0
         ignorados_sem_whatsapp = 0
         ignorados_sem_pdf_cache = 0
+        mensagens_tentadas = 0
+        mensagens_enviadas = 0
+        inicio_execucao = time.monotonic()
 
         origem_pdf_msg = f"cache em {pasta_cache}" if usar_relatorios_pregerados else "URL dinamica"
         self.stdout.write(
-            f"Processando {lotes.count()} lotes: periodo {data_inicio.strftime('%d/%m/%Y')} ate {data_fim.strftime('%d/%m/%Y')} | Origem PDF: {origem_pdf_msg}"
+            f"Processando {lotes.count()} lotes: periodo {data_inicio.strftime('%d/%m/%Y')} ate {data_fim.strftime('%d/%m/%Y')} | Origem PDF: {origem_pdf_msg} | Intervalo entre envios: {intervalo_segundos:.1f}s"
         )
 
         for lote in lotes:
@@ -130,7 +141,8 @@ class Command(BaseCommand):
                 continue
 
             envio_ok_lote = False
-            for destino_lote in destinos_lote:
+            for indice_destino, destino_lote in enumerate(destinos_lote):
+                mensagens_tentadas += 1
                 try:
                     if options["enviar_pdf"]:
                         resultado = enviar_relatorio_pdf_whatsapp(
@@ -153,6 +165,7 @@ class Command(BaseCommand):
                             to_whatsapp=destino_lote,
                         )
                     envio_ok_lote = True
+                    mensagens_enviadas += 1
                     self.stdout.write(
                         self.style.SUCCESS(
                             f"[OK] Lote {lote.numero} enviado para {destino_lote} | Tipo: {resultado.get('tipo', 'texto')} | SID: {resultado.get('sid')}"
@@ -164,14 +177,29 @@ class Command(BaseCommand):
                     falhas += 1
                     self.stdout.write(self.style.ERROR(f"[ERRO] Lote {lote.numero} para {destino_lote} falhou: {exc}"))
 
+                if intervalo_segundos > 0 and indice_destino < (len(destinos_lote) - 1):
+                    time.sleep(intervalo_segundos)
+
+            if intervalo_segundos > 0 and destinos_lote:
+                time.sleep(intervalo_segundos)
+
             if envio_ok_lote:
                 enviados += 1
+
+        duracao_total_segundos = max(0.0, time.monotonic() - inicio_execucao)
+        horas = int(duracao_total_segundos // 3600)
+        minutos = int((duracao_total_segundos % 3600) // 60)
+        segundos = duracao_total_segundos % 60
+        media_por_mensagem = (duracao_total_segundos / mensagens_tentadas) if mensagens_tentadas > 0 else 0.0
 
         self.stdout.write(
             self.style.SUCCESS(
                 "Finalizado. "
                 f"Enviados: {enviados} | Ignorados sem WhatsApp: {ignorados_sem_whatsapp} "
-                f"| Ignorados sem PDF cache: {ignorados_sem_pdf_cache} | Falhas: {falhas}"
+                f"| Ignorados sem PDF cache: {ignorados_sem_pdf_cache} | Falhas: {falhas} "
+                f"| Mensagens enviadas: {mensagens_enviadas}/{mensagens_tentadas} "
+                f"| Tempo total: {horas:02d}:{minutos:02d}:{segundos:05.2f} "
+                f"| Media por mensagem: {media_por_mensagem:.2f}s"
             )
         )
 
