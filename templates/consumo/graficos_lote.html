@@ -117,7 +117,7 @@
             </h3>
             <canvas id="chartConsumoMes"></canvas>
             <p style="font-size: 0.85rem; color: var(--secondary-color); margin-top: 1rem; text-align: center;" id="total-mes-descricao">
-                Visualização mensal do consumo ao longo do período
+                Visualização mensal do consumo para comparação
             </p>
         </div>
     </div>
@@ -182,7 +182,10 @@ document.addEventListener('DOMContentLoaded', function() {
         ? (consumoTotal / 1000).toFixed(1).replace('.', ',') + ' mil' 
         : Math.round(consumoTotal).toLocaleString('pt-BR');
     document.getElementById('consumo-total-display').textContent = consumoFormatado + ' L';
-    document.getElementById('total-mes-descricao').innerHTML = `Visualização mensal do consumo (Total: <strong>${consumoFormatado} L</strong>)`;
+    const descricaoMensal = dadosGraficos.periodo_selecionado === 'personalizado'
+        ? 'Visualização mensal do consumo no ano (inclui meses anteriores para comparação)'
+        : 'Visualização mensal do consumo ao longo do período';
+    document.getElementById('total-mes-descricao').textContent = descricaoMensal;
     
     // Selecionar período correto no dropdown
     const periodoSelect = document.getElementById('periodo');
