@@ -308,6 +308,7 @@ curl "http://localhost:8000/api/leituras/?data_inicio=2026-01-01&data_fim=2026-0
 - Pasta gerada: `media/relatorios_mensais/2026-02-15/`
 - Para lotes sem dados no período, o sistema gera um PDF de fallback "sem dados" para manter o envio em arquivo.
 - Em produção (Render), a pré-geração do dia 15 roda via endpoint interno do serviço web (`/jobs/pregerar-relatorios/`) para garantir acesso ao disco com as fotos.
+- A pré-geração baixa cada PDF pela mesma URL usada no botão do lote (`/lotes/<id>/graficos/exportar/pdf/?periodo=personalizado...`).
 - Envio automático no dia 20 (usa os PDFs já pré-gerados, somente PDF): `python manage.py enviar_whatsapp_mensal --enviar-pdf --sem-fallback-texto --obrigar-relatorios-pregerados`
 - Período padrão com cache: anual até a data da coleta (01/01 até dia 15 do mês)
 - Provedor usado: **Z-API** (`https://app.z-api.io/app`)
