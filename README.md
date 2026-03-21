@@ -310,13 +310,13 @@ curl "http://localhost:8000/api/leituras/?data_inicio=2026-01-01&data_fim=2026-0
 - Em produção (Render), a pré-geração do dia 15 roda via endpoint interno do serviço web (`/jobs/pregerar-relatorios/`) para garantir acesso ao disco com as fotos.
 - A pré-geração baixa cada PDF pela mesma URL usada no botão do lote (`/lotes/<id>/graficos/exportar/pdf/?periodo=personalizado...`).
 - Envio automático no dia 20 (usa os PDFs já pré-gerados, somente PDF): `python manage.py enviar_whatsapp_mensal --enviar-pdf --sem-fallback-texto --obrigar-relatorios-pregerados`
-- Período padrão com cache: anual até a data da coleta (01/01 até dia 15 do mês)
+- Período padrão com cache: ciclo mensal de leitura (16 do mês anterior até 15 do mês da coleta)
 - Provedor usado: **Z-API** (`https://app.z-api.io/app`)
 - Formato de destino aceito: `+55...` ou `55...` (somente dígitos também funciona)
 - Simulação sem envio real: `python manage.py enviar_whatsapp_mensal --dry-run --data-referencia 2026-02-20`
 - Envio com PDF sem usar cache (comportamento antigo): `python manage.py enviar_whatsapp_mensal --enviar-pdf --nao-usar-relatorios-pregerados`
 - Envio com PDF sem fallback: `python manage.py enviar_whatsapp_mensal --enviar-pdf --sem-fallback-texto`
-- Teste isolado com PDF: `python manage.py enviar_whatsapp_teste --enviar-pdf --to 55219SEUNUMERO --pdf-url https://SEU_DOMINIO/lotes/1/graficos/exportar/pdf/?periodo=ano_atual`
+- Teste isolado com PDF (ciclo mensal 16 a 15): `python manage.py enviar_whatsapp_teste --enviar-pdf --to 55219SEUNUMERO --pdf-url "https://SEU_DOMINIO/lotes/1/graficos/exportar/pdf/?periodo=personalizado&data_inicio=2026-01-16&data_fim=2026-02-15"`
 - Se quiser exigir cache mesmo fora do dia 20: `python manage.py enviar_whatsapp_mensal --enviar-pdf --obrigar-relatorios-pregerados`
 - Agendamento em produção: serviço `cron` no [render.yaml](render.yaml) com schedule `0 11 20 * *` (08:00 no horário de Brasília)
 - Observação de fuso: o Render agenda em UTC; por isso `0 11 20 * *` equivale a 08:00 em Brasília.
