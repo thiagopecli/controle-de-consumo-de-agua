@@ -9,15 +9,15 @@ Sistema completo para gerenciamento e monitoramento de consumo de água através
 - ✅ API RESTful completa
 - ✅ Interface web intuitiva com dashboard
 - ✅ Gráficos interativos de consumo
-- ✅ Exportação de relatórios em PDF e Excel
+- ✅ Exportação de relatórios em PDF
 - ✅ **Download em lote de relatórios individuais (ZIP)** - Baixe todos os relatórios detalhados dos lotes em um único arquivo
 - **API:** Django REST Framework
  Sistema completo para gerenciamento e monitoramento de consumo de água através de hidrômetros, desenvolvido com Django, PostgreSQL e Django REST Framework.
 - **Gráficos:** Chart.js
-- **Relatórios:** ReportLab (PDF), openpyxl (Excel)
+- **Relatórios:** ReportLab (PDF)
  **Backend:** Python 3.10+, Django 5.0
 - [Guia de Gráficos](docs/GUIA_USO_GRAFICOS.md) - Como usar os gráficos do sistema
-- [**Exportação de Relatórios**](docs/EXPORTACAO_RELATORIOS.md) - Como exportar relatórios em PDF e Excel
+- [**Exportação de Relatórios**](docs/EXPORTACAO_RELATORIOS.md) - Como exportar relatórios em PDF
 - [Projeto Completo](docs/PROJETO_COMPLETO.md) - Documentação técnica completa
 ## 📚 Documentação
 
@@ -255,7 +255,7 @@ Mais detalhes técnicos: veja [docs/API_TECNICA.md](docs/API_TECNICA.md).
    - Consumo acumulado
    - Consumo por período
    - Top 10 maiores consumos
-   - **Exportação em PDF e Excel**
+   - **Exportação em PDF**
 
 5. **Gráficos por Lote** (`/lotes/{id}/graficos/`)
    - Consumo do lote específico
@@ -330,7 +330,7 @@ Conforme mencionado, você pode adicionar:
 
 - [ ] Autenticação JWT para API
 - [ ] Notificações de consumo anormal
-- [x] **Exportação de relatórios (PDF, Excel)** ✅
+- [x] **Exportação de relatórios (PDF)** ✅
 - [ ] Sistema de alertas por email
 - [ ] Dashboard mobile responsivo
 - [ ] Integração com sensores IoT

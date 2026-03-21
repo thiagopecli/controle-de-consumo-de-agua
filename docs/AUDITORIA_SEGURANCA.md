@@ -84,7 +84,6 @@
 - ✅ Gráficos de consumo carregando corretamente
 - ✅ Gráficos por lote funcionando
 - ✅ Exportação em PDF funcionando
-- ✅ Exportação em Excel funcionando
 
 ---
 

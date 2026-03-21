@@ -17,9 +17,6 @@
             <a href="{% url 'consumo:exportar_graficos_consumo_pdf' %}?{{ request.GET.urlencode }}" class="btn btn-primary" style="background: #e74c3c;">
                 📄 Baixar PDF
             </a>
-            <a href="{% url 'consumo:exportar_graficos_consumo_excel' %}?{{ request.GET.urlencode }}" class="btn btn-primary" style="background: #27ae60;">
-                📊 Baixar Excel
-            </a>
             <button onclick="abrirModalRelatorios()" class="btn btn-primary" style="background: #6f42c1;">
                 🗂️ Baixar Relatórios dos Lotes
             </button>

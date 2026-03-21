@@ -15,9 +15,6 @@ import os
 import hmac
 import zipfile
 import glob
-from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, PatternFill
-from openpyxl.chart import BarChart, PieChart, LineChart, Reference
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
@@ -1580,310 +1577,6 @@ def baixar_relatorios_lotes_periodo_zip(request):
     return response
 
 
-def exportar_graficos_consumo_excel(request):
-    """Exporta os gráficos de consumo do condomínio em Excel com gráficos"""
-    import os
-    os.environ.setdefault('MPLCONFIGDIR', '/tmp/matplotlib')
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
-    
-    # Obter dados dos gráficos (mesma lógica da view graficos_consumo)
-    agora = timezone.localtime(timezone.now())
-    ultima_coleta = Leitura.objects.filter(
-        hidrometro__ativo=True,
-        hidrometro__lote__tipo='residencial'
-    ).aggregate(ultima=Max('data_leitura'))['ultima']
-
-    if ultima_coleta:
-        hoje = timezone.localtime(ultima_coleta) if timezone.is_aware(ultima_coleta) else timezone.make_aware(ultima_coleta)
-    else:
-        hoje = agora
-
-    ano_atual = hoje.year
-
-    # Obter o período selecionado (padrão: ano atual)
-    periodo_selecionado = request.GET.get('periodo', 'ano_atual')
-
-    # Definir data de início baseada no período selecionado
-    if periodo_selecionado == 'ano_atual':
-        # Ano atual (de 1º de janeiro até hoje)
-        data_inicio_ano = timezone.datetime(ano_atual, 1, 1, 0, 0, 0, tzinfo=hoje.tzinfo)
-        data_inicio_dias = data_inicio_ano
-        periodo_label = f"Ano Atual ({ano_atual})"
-    elif periodo_selecionado == 'personalizado':
-        # Período personalizado (data_inicio e data_fim via GET)
-        data_inicio_str = request.GET.get('data_inicio')
-        data_fim_str = request.GET.get('data_fim')
-        
-        if data_inicio_str and data_fim_str:
-            try:
-                data_inicio_dias = timezone.datetime.strptime(data_inicio_str, '%Y-%m-%d')
-                data_inicio_dias = timezone.make_aware(data_inicio_dias.replace(hour=0, minute=0, second=0, microsecond=0))
-                data_fim_personalizada = timezone.datetime.strptime(data_fim_str, '%Y-%m-%d')
-                data_fim_personalizada = timezone.make_aware(data_fim_personalizada.replace(hour=23, minute=59, second=59, microsecond=999999))
-                
-                # Limitar data_fim ao hoje se for futuro
-                if data_fim_personalizada > hoje:
-                    data_fim_personalizada = hoje
-                
-                data_inicio_ano = data_inicio_dias
-                periodo_label = f"{data_inicio_dias.strftime('%d/%m/%Y')} até {data_fim_personalizada.strftime('%d/%m/%Y')}"
-                hoje = data_fim_personalizada  # Usar data_fim personalizada
-            except (ValueError, TypeError):
-                # Se houver erro, usar padrão (ano atual)
-                data_inicio_dias = timezone.datetime(ano_atual, 1, 1, 0, 0, 0, tzinfo=hoje.tzinfo)
-                data_inicio_ano = data_inicio_dias
-                periodo_label = f"Ano Atual ({ano_atual})"
-        else:
-            # Sem datas fornecidas, usar padrão
-            data_inicio_dias = timezone.datetime(ano_atual, 1, 1, 0, 0, 0, tzinfo=hoje.tzinfo)
-            data_inicio_ano = data_inicio_dias
-            periodo_label = f"Ano Atual ({ano_atual})"
-    else:
-        # Padrão: ano atual
-        data_inicio_dias = timezone.datetime(ano_atual, 1, 1, 0, 0, 0, tzinfo=hoje.tzinfo)
-        data_inicio_ano = data_inicio_dias
-        periodo_label = f"Ano Atual ({ano_atual})"
-    
-    data_fim = hoje
-    
-    # Buscar todos os hidrômetros ativos
-    hidrometros = Hidrometro.objects.filter(
-        ativo=True,
-        lote__tipo='residencial'
-    ).select_related('lote')
-    
-    # Consumo por hidrômetro (individual) no período
-    consumo_por_hidrometro = []
-    consumo_total_periodo = 0.0
-    
-    for hidrometro in hidrometros:
-        # Buscar última leitura ANTES do período (para ter base de comparação)
-        leitura_anterior_periodo = hidrometro.leituras.filter(
-            data_leitura__lt=data_inicio_dias
-        ).order_by('-data_leitura').first()
-
-        # Preparar leituras do período
-        leituras_periodo = list(hidrometro.leituras.filter(
-            data_leitura__gte=data_inicio_dias,
-            data_leitura__lte=data_fim
-        ).order_by('data_leitura'))
-
-        # Combinar (anterior + período)
-        if leitura_anterior_periodo:
-            leituras_para_calculo = [leitura_anterior_periodo] + leituras_periodo
-        else:
-            leituras_para_calculo = leituras_periodo
-        
-        consumo_hidrometro_litros = 0.0
-        for i in range(1, len(leituras_para_calculo)):
-            leitura_atual = leituras_para_calculo[i]
-            leitura_anterior = leituras_para_calculo[i - 1]
-
-            # Só contabilizar se a leitura ATUAL estiver dentro do período filtrado
-            if leitura_atual.data_leitura < data_inicio_dias:
-                continue
-            
-            consumo_m3 = float(leitura_atual.leitura - leitura_anterior.leitura)
-            if consumo_m3 < 0:
-                continue
-                
-            consumo_litros = consumo_m3 * 1000
-            consumo_hidrometro_litros += consumo_litros
-            consumo_total_periodo += consumo_litros
-                
-        consumo_por_hidrometro.append({
-            'hidrometro': hidrometro.numero,
-            'lote': hidrometro.lote.numero,
-            'consumo_litros': round(consumo_hidrometro_litros, 2),
-        })
-    
-    # Top 10 lotes por consumo (baseado no período filtrado)
-    lotes_consumo = []
-    for lote in Lote.objects.filter(ativo=True, tipo='residencial'):
-        consumo_lote = 0.0
-        hidrometros_lote = lote.hidrometros.filter(ativo=True)
-        
-        for hidrometro in hidrometros_lote:
-            leituras_periodo = hidrometro.leituras.filter(
-                data_leitura__gte=data_inicio_dias,
-                data_leitura__lte=data_fim
-            ).order_by('data_leitura')
-            
-            if leituras_periodo.count() >= 2:
-                primeira = leituras_periodo.first()
-                ultima = leituras_periodo.last()
-                consumo_m3 = float(ultima.leitura - primeira.leitura)
-                consumo_litros = consumo_m3 * 1000
-                consumo_lote += consumo_litros
-        
-        if consumo_lote > 0:
-            lotes_consumo.append({
-                'lote': lote,
-                'consumo': consumo_lote
-            })
-    
-    lotes_consumo.sort(key=lambda x: x['consumo'], reverse=True)
-    top_lotes = lotes_consumo[:10]
-    
-    # Ordenar hidrômetros por lote (numéricos primeiro, depois ADM)
-    def _ordenar_lote(item):
-        numero = item['lote']
-        try:
-            return (0, int(numero), numero)
-        except ValueError:
-            if numero.upper().startswith('ADM-'):
-                try:
-                    return (1, int(numero.split('-', 1)[1]), numero)
-                except ValueError:
-                    return (1, float('inf'), numero)
-            return (1, float('inf'), numero)
-
-    consumo_por_hidrometro = sorted(
-        consumo_por_hidrometro,
-        key=lambda x: (_ordenar_lote(x), x['hidrometro'])
-    )
-    
-    # Criar Excel
-    wb = Workbook()
-    
-    # Aba: Resumo
-    ws_resumo = wb.active
-    ws_resumo.title = "Resumo"
-    
-    # Título
-    ws_resumo['A1'] = f'Relatório de Consumo de Água - {periodo_label}'
-    ws_resumo['A1'].font = Font(size=16, bold=True, color='FFFFFF')
-    ws_resumo['A1'].fill = PatternFill(start_color='3498db', end_color='3498db', fill_type='solid')
-    ws_resumo['A1'].alignment = Alignment(horizontal='center')
-    ws_resumo.merge_cells('A1:C1')
-    
-    ws_resumo['A2'] = f'Gerado em: {agora.strftime("%d/%m/%Y %H:%M")}'
-    ws_resumo['A2'].alignment = Alignment(horizontal='center')
-    ws_resumo.merge_cells('A2:C2')
-    
-    # Dados resumo
-    ws_resumo['A4'] = 'Indicador'
-    ws_resumo['B4'] = 'Valor'
-    ws_resumo['A4'].font = Font(bold=True)
-    ws_resumo['B4'].font = Font(bold=True)
-    
-    resumo_dados = [
-        ['Período', periodo_label],
-        ['Consumo Total', f'{consumo_total_periodo:,.0f} L'],
-        ['Hidrômetros Ativos', hidrometros.count()],
-        ['Lotes Ativos', Lote.objects.filter(ativo=True, tipo='residencial').count()],
-    ]
-    
-    for idx, (indicador, valor) in enumerate(resumo_dados, start=5):
-        ws_resumo[f'A{idx}'] = indicador
-        ws_resumo[f'B{idx}'] = valor
-    
-    ws_resumo.column_dimensions['A'].width = 30
-    ws_resumo.column_dimensions['B'].width = 20
-    
-    # Aba: Top 10 Lotes
-    ws_top = wb.create_sheet("Top 10 Lotes")
-    
-    ws_top['A1'] = 'Posição'
-    ws_top['B1'] = 'Lote'
-    ws_top['C1'] = 'Tipo'
-    ws_top['D1'] = 'Consumo (L)'
-    
-    for col in ['A1', 'B1', 'C1', 'D1']:
-        ws_top[col].font = Font(bold=True)
-    
-    for idx, item in enumerate(top_lotes, 1):
-        lote = item['lote']
-        consumo = item['consumo']
-        ws_top[f'A{idx + 1}'] = idx
-        ws_top[f'B{idx + 1}'] = lote.numero
-        ws_top[f'C{idx + 1}'] = lote.get_tipo_display()
-        ws_top[f'D{idx + 1}'] = round(consumo, 2)
-    
-    # Gerar gráfico com matplotlib (igual ao PDF)
-    if top_lotes:
-        plt.figure(figsize=(12, 6))
-        lotes_labels = [item['lote'].numero for item in top_lotes]
-        lotes_valores = [item['consumo'] for item in top_lotes]
-        plt.barh(lotes_labels[::-1], lotes_valores[::-1], color='#e74c3c', alpha=0.7)
-        plt.title(f'Top 10 Lotes - Consumo ({periodo_label})', fontsize=14, fontweight='bold')
-        plt.xlabel('Consumo (L)', fontsize=11)
-        plt.ylabel('Lote', fontsize=11)
-        plt.grid(axis='x', alpha=0.3)
-        plt.tight_layout()
-        
-        # Salvar gráfico em buffer
-        img_buffer_top = io.BytesIO()
-        plt.savefig(img_buffer_top, format='png', dpi=100, bbox_inches='tight')
-        img_buffer_top.seek(0)
-        plt.close()
-        
-        # Adicionar imagem ao Excel
-        from openpyxl.drawing.image import Image as XLImage
-        img_top_chart = XLImage(img_buffer_top)
-        img_top_chart.width = 600
-        img_top_chart.height = 300
-        ws_top.add_image(img_top_chart, "F2")
-    
-    for col in ['A', 'B', 'C', 'D']:
-        ws_top.column_dimensions[col].width = 15
-
-    # Aba: Consumo por Hidrômetro
-    ws_hid = wb.create_sheet("Consumo por Hidrômetro")
-    ws_hid['A1'] = 'Hidrômetro'
-    ws_hid['B1'] = 'Lote'
-    ws_hid['C1'] = 'Consumo (L)'
-    for col in ['A1', 'B1', 'C1']:
-        ws_hid[col].font = Font(bold=True)
-
-    for idx, item in enumerate(consumo_por_hidrometro, start=2):
-        ws_hid[f'A{idx}'] = item['hidrometro']
-        ws_hid[f'B{idx}'] = item['lote']
-        ws_hid[f'C{idx}'] = item['consumo_litros']
-
-    for col in ['A', 'B', 'C']:
-        ws_hid.column_dimensions[col].width = 18
-
-    # Gráfico de barras por hidrômetro
-    if consumo_por_hidrometro:
-        plt.figure(figsize=(14, 6))
-        labels_h = [f"{item['hidrometro']} (Lote {item['lote']})" for item in consumo_por_hidrometro]
-        valores_h = [item['consumo_litros'] for item in consumo_por_hidrometro]
-        plt.bar(range(len(labels_h)), valores_h, color='#eab308', alpha=0.85)
-        plt.title(f'Consumo por Hidrômetro ({periodo_label})', fontsize=14, fontweight='bold')
-        plt.xlabel('Hidrômetro', fontsize=11)
-        plt.ylabel('Consumo (L)', fontsize=11)
-        plt.xticks(range(len(labels_h)), labels_h, rotation=60, ha='right', fontsize=8)
-        plt.grid(axis='y', alpha=0.3)
-        plt.tight_layout()
-
-        img_buffer_h = io.BytesIO()
-        plt.savefig(img_buffer_h, format='png', dpi=100, bbox_inches='tight')
-        img_buffer_h.seek(0)
-        plt.close()
-
-        from openpyxl.drawing.image import Image as XLImage
-        img_h_chart = XLImage(img_buffer_h)
-        img_h_chart.width = 700
-        img_h_chart.height = 320
-        ws_hid.add_image(img_h_chart, "E2")
-    
-    # Salvar e retornar
-    buffer = io.BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    
-    response = HttpResponse(
-        buffer.getvalue(),
-        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    )
-    response['Content-Disposition'] = f'attachment; filename="relatorio_consumo_condominio_{agora.strftime("%Y%m%d")}.xlsx"'
-    
-    return response
-
-
 def exportar_graficos_lote_pdf(request, lote_id):
     """Exporta os gráficos de consumo de um lote específico em PDF"""
     import os
@@ -1922,9 +1615,9 @@ def exportar_graficos_lote_pdf(request, lote_id):
         data_inicio = hoje.replace(month=1, day=1)
         periodo_label = f'Ano de {hoje.year}'
     
-    hidrometros = lote.hidrometros.filter(ativo=True)
+    hidrometros = list(lote.hidrometros.filter(ativo=True).only('id', 'numero'))
     
-    if not hidrometros.exists():
+    if not hidrometros:
         return HttpResponse("Nenhum hidrômetro ativo encontrado para este lote.", status=404)
     
     # Calcular consumo no periodo
@@ -1936,33 +1629,58 @@ def exportar_graficos_lote_pdf(request, lote_id):
     consumo_por_dia = {}
     consumo_por_mes = {}
 
+    tz_atual = timezone.get_current_timezone()
+    inicio_periodo_dt = timezone.make_aware(
+        datetime.combine(data_inicio, datetime.min.time()),
+        tz_atual
+    )
+    fim_periodo_dt = timezone.make_aware(
+        datetime.combine(data_fim, datetime.max.time()),
+        tz_atual
+    )
+
+    leituras_periodo_lista = list(
+        Leitura.objects.filter(
+            hidrometro__lote=lote,
+            hidrometro__ativo=True,
+            data_leitura__gte=inicio_periodo_dt,
+            data_leitura__lte=fim_periodo_dt
+        )
+        .select_related('hidrometro')
+        .order_by('data_leitura')
+    )
+
+    leituras_por_hidrometro = {}
+    for leitura in leituras_periodo_lista:
+        leituras_por_hidrometro.setdefault(leitura.hidrometro_id, []).append(leitura)
+
+    ultima_leitura_antes_periodo = {}
     for hidrometro in hidrometros:
-        # Buscar última leitura ANTES do período (para ter base de comparação)
-        leitura_anterior_periodo = hidrometro.leituras.filter(
-            data_leitura__date__lt=data_inicio
-        ).order_by('-data_leitura').first()
+        leitura_anterior = (
+            Leitura.objects.filter(
+                hidrometro=hidrometro,
+                data_leitura__lt=inicio_periodo_dt
+            )
+            .only('leitura', 'data_leitura', 'hidrometro_id')
+            .order_by('-data_leitura')
+            .first()
+        )
+        if leitura_anterior:
+            ultima_leitura_antes_periodo[hidrometro.id] = leitura_anterior
 
-        # Preparar leituras do período
-        leituras_periodo = list(hidrometro.leituras.filter(
-            data_leitura__date__gte=data_inicio,
-            data_leitura__date__lte=data_fim
-        ).order_by('data_leitura'))
+    for hidrometro in hidrometros:
+        leituras_hidrometro = leituras_por_hidrometro.get(hidrometro.id, [])
+        if not leituras_hidrometro:
+            continue
 
-        # Combinar (anterior + período)
-        if leitura_anterior_periodo:
-            leituras_para_calculo = [leitura_anterior_periodo] + leituras_periodo
-        else:
-            leituras_para_calculo = leituras_periodo
-
-        for i in range(1, len(leituras_para_calculo)):
-            leitura_atual = leituras_para_calculo[i]
-            leitura_anterior = leituras_para_calculo[i - 1]
-
-            # Só contabilizar se a leitura ATUAL estiver dentro do período filtrado
-            if leitura_atual.data_leitura.date() < data_inicio:
+        leitura_referencia = ultima_leitura_antes_periodo.get(hidrometro.id)
+        for leitura_atual in leituras_hidrometro:
+            if leitura_referencia is None:
+                leitura_referencia = leitura_atual
                 continue
 
-            diferenca = float(leitura_atual.leitura - leitura_anterior.leitura)
+            diferenca = float(leitura_atual.leitura - leitura_referencia.leitura)
+            leitura_referencia = leitura_atual
             if diferenca <= 0:
                 continue
 
@@ -2044,7 +1762,7 @@ def exportar_graficos_lote_pdf(request, lote_id):
         ['Tipo', lote.get_tipo_display()],
         ['Período', periodo_label],
         ['Consumo Total no Período', f'{consumo_total_periodo:,.0f} L'],
-        ['Hidrometros Ativos', str(hidrometros.count())],
+        ['Hidrometros Ativos', str(len(hidrometros))],
     ]
     
     resumo_table = Table(resumo_data, colWidths=[3*inch, 2*inch])
@@ -2115,11 +1833,7 @@ def exportar_graficos_lote_pdf(request, lote_id):
     elements.append(img)
     elements.append(Spacer(1, 0.3*inch))
 
-    leituras_periodo = Leitura.objects.filter(
-        hidrometro__lote=lote,
-        data_leitura__date__gte=data_inicio,
-        data_leitura__date__lte=data_fim
-    ).select_related('hidrometro').order_by('data_leitura')
+    leituras_periodo = leituras_periodo_lista
 
     elements.append(PageBreak())
     elements.append(Paragraph("📋 Leituras no Período", heading_style))
@@ -2133,8 +1847,23 @@ def exportar_graficos_lote_pdf(request, lote_id):
         'Observações'
     ]]
 
-    for leitura in leituras_periodo:
-        consumo_litros = leitura.consumo_desde_ultima_leitura_litros()
+    # Limita o detalhe em períodos grandes para evitar timeout/memória excessiva no servidor.
+    max_linhas_detalhe = 1200
+    leituras_exibidas = leituras_periodo[:max_linhas_detalhe]
+
+    ultima_por_hidrometro = {
+        hid_id: leitura for hid_id, leitura in ultima_leitura_antes_periodo.items()
+    }
+
+    for leitura in leituras_exibidas:
+        leitura_anterior = ultima_por_hidrometro.get(leitura.hidrometro_id)
+        if leitura_anterior is None:
+            consumo_litros = 0.0
+        else:
+            diferenca = float(leitura.leitura - leitura_anterior.leitura)
+            consumo_litros = diferenca * 1000 if diferenca > 0 else 0.0
+        ultima_por_hidrometro[leitura.hidrometro_id] = leitura
+
         responsavel = leitura.responsavel or 'N/A'
         observacoes = leitura.observacoes or '—'
         if len(observacoes) > 60:
@@ -2147,6 +1876,13 @@ def exportar_graficos_lote_pdf(request, lote_id):
             responsavel,
             observacoes,
         ])
+
+    if len(leituras_periodo) > max_linhas_detalhe:
+        elements.append(Paragraph(
+            f"Observação: exibindo {max_linhas_detalhe} de {len(leituras_periodo)} leituras do período para manter performance.",
+            styles['Italic']
+        ))
+        elements.append(Spacer(1, 0.12*inch))
 
     leituras_table = Table(
         leituras_data,
@@ -2169,80 +1905,102 @@ def exportar_graficos_lote_pdf(request, lote_id):
     elements.append(leituras_table)
     elements.append(Spacer(1, 0.3*inch))
 
-    leituras_com_foto = [leitura for leitura in leituras_periodo if leitura.foto]
     buffers_fotos_pdf = []
-    if leituras_com_foto:
-        elements.append(PageBreak())
-        elements.append(Paragraph("📷 Fotos das Leituras", heading_style))
-        for leitura in leituras_com_foto:
-            try:
-                if not leitura.foto:
-                    continue
+    # Para lotes administrativos, removemos completamente o processamento de fotos
+    # para reduzir uso de CPU/memória na geração do PDF.
+    if lote.tipo != 'administracao':
+        incluir_fotos_param = request.GET.get('incluir_fotos')
+        if incluir_fotos_param is None:
+            incluir_fotos = (data_fim - data_inicio).days <= 62
+        else:
+            incluir_fotos = incluir_fotos_param.lower() in ('1', 'true', 'sim', 'yes')
 
-                foto_source = None
+        max_fotos = 40
+        leituras_com_foto = [leitura for leitura in leituras_periodo if leitura.foto][:max_fotos] if incluir_fotos else []
 
-                # Prioriza stream do storage (funciona com storage remoto e local).
+        if leituras_com_foto:
+            elements.append(PageBreak())
+            elements.append(Paragraph("📷 Fotos das Leituras", heading_style))
+            for leitura in leituras_com_foto:
                 try:
-                    leitura.foto.open('rb')
-                    conteudo = leitura.foto.read()
-                    if conteudo:
-                        foto_buffer = io.BytesIO(conteudo)
-                        buffers_fotos_pdf.append(foto_buffer)
-                        foto_source = foto_buffer
-                except Exception:
+                    if not leitura.foto:
+                        continue
+
                     foto_source = None
-                finally:
+
+                    # Prioriza stream do storage (funciona com storage remoto e local).
                     try:
-                        leitura.foto.close()
+                        leitura.foto.open('rb')
+                        conteudo = leitura.foto.read()
+                        if conteudo:
+                            foto_buffer = io.BytesIO(conteudo)
+                            buffers_fotos_pdf.append(foto_buffer)
+                            foto_source = foto_buffer
                     except Exception:
-                        pass
+                        foto_source = None
+                    finally:
+                        try:
+                            leitura.foto.close()
+                        except Exception:
+                            pass
 
-                # Fallback para caminho de arquivo local quando disponível.
-                if foto_source is None:
-                    foto_path = None
-                    if hasattr(leitura.foto, 'path'):
-                        foto_path = leitura.foto.path
-                        if not os.path.isabs(foto_path):
-                            foto_path = os.path.join(settings.MEDIA_ROOT, foto_path)
-                    elif hasattr(leitura.foto, 'file'):
-                        foto_file = leitura.foto.file.name
-                        if not os.path.isabs(foto_file):
-                            foto_path = os.path.join(settings.MEDIA_ROOT, foto_file)
+                    # Fallback para caminho de arquivo local quando disponível.
+                    if foto_source is None:
+                        foto_path = None
+                        if hasattr(leitura.foto, 'path'):
+                            foto_path = leitura.foto.path
+                            if not os.path.isabs(foto_path):
+                                foto_path = os.path.join(settings.MEDIA_ROOT, foto_path)
+                        elif hasattr(leitura.foto, 'file'):
+                            foto_file = leitura.foto.file.name
+                            if not os.path.isabs(foto_file):
+                                foto_path = os.path.join(settings.MEDIA_ROOT, foto_file)
+                            else:
+                                foto_path = foto_file
+
+                        if foto_path and os.path.exists(foto_path):
+                            foto_source = foto_path
                         else:
-                            foto_path = foto_file
+                            alt_path = os.path.join(settings.MEDIA_ROOT, str(leitura.foto))
+                            if os.path.exists(alt_path):
+                                foto_source = alt_path
 
-                    if foto_path and os.path.exists(foto_path):
-                        foto_source = foto_path
-                    else:
-                        alt_path = os.path.join(settings.MEDIA_ROOT, str(leitura.foto))
-                        if os.path.exists(alt_path):
-                            foto_source = alt_path
+                    if foto_source is None:
+                        continue
 
-                if foto_source is None:
+                    legenda = (
+                        f"Hidrômetro {leitura.hidrometro.numero} - "
+                        f"{leitura.data_leitura.strftime('%d/%m/%Y %H:%M')}"
+                    )
+                    elements.append(Paragraph(legenda, styles['Normal']))
+                    elements.append(Spacer(1, 0.1*inch))
+
+                    # Adicionar foto com tratamento de erro
+                    try:
+                        img_foto = Image(foto_source, width=6.5*inch, height=3.8*inch)
+                        elements.append(img_foto)
+                    except Exception as img_error:
+                        # Se falhar ao carregar imagem, adicionar nota
+                        elements.append(Paragraph(
+                            f"[Foto não disponível: {str(img_error)[:50]}]",
+                            styles['Normal']
+                        ))
+
+                    elements.append(Spacer(1, 0.2*inch))
+                except Exception:
+                    # Continuar com próxima foto se houver erro
                     continue
-                    
-                legenda = (
-                    f"Hidrômetro {leitura.hidrometro.numero} - "
-                    f"{leitura.data_leitura.strftime('%d/%m/%Y %H:%M')}"
-                )
-                elements.append(Paragraph(legenda, styles['Normal']))
-                elements.append(Spacer(1, 0.1*inch))
-                
-                # Adicionar foto com tratamento de erro
-                try:
-                    img_foto = Image(foto_source, width=6.5*inch, height=3.8*inch)
-                    elements.append(img_foto)
-                except Exception as img_error:
-                    # Se falhar ao carregar imagem, adicionar nota
-                    elements.append(Paragraph(
-                        f"[Foto não disponível: {str(img_error)[:50]}]",
-                        styles['Normal']
-                    ))
-                    
-                elements.append(Spacer(1, 0.2*inch))
-            except Exception as e:
-                # Continuar com próxima foto se houver erro
-                continue
+
+            if incluir_fotos and len([leitura for leitura in leituras_periodo if leitura.foto]) > max_fotos:
+                elements.append(Paragraph(
+                    f"Observação: exibindo {max_fotos} fotos para manter a performance do relatório.",
+                    styles['Italic']
+                ))
+        elif not incluir_fotos:
+            elements.append(Paragraph(
+                "Fotos não incluídas automaticamente em períodos longos para evitar timeout. Use incluir_fotos=1 para forçar inclusão.",
+                styles['Italic']
+            ))
     
     
     # Construir PDF
@@ -2269,290 +2027,4 @@ def exportar_graficos_lote_pdf(request, lote_id):
     return response
 
 
-def exportar_graficos_lote_excel(request, lote_id):
-    """Exporta os gráficos de consumo de um lote específico em Excel com gráficos"""
-    import os
-    os.environ.setdefault('MPLCONFIGDIR', '/tmp/matplotlib')
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
-    
-    lote = get_object_or_404(Lote, id=lote_id)
-    
-    # Obter dados do lote (mesma lógica da view graficos_lote)
-    agora = timezone.localtime(timezone.now())
-    hoje = agora.date()
-    periodo = request.GET.get('periodo', 'ano_atual')
-    data_inicio_str = request.GET.get('data_inicio', '')
-    data_fim_str = request.GET.get('data_fim', '')
-    data_fim = hoje
-    periodo_label = ''
-
-    if periodo == 'ano_atual':
-        data_inicio = hoje.replace(month=1, day=1)
-        periodo_label = f'Ano de {hoje.year}'
-    elif periodo == 'personalizado' and data_inicio_str and data_fim_str:
-        try:
-            data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
-            data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
-            if data_fim > hoje:
-                data_fim = hoje
-            periodo_label = f'{data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}'
-        except (ValueError, TypeError):
-            data_inicio = hoje.replace(month=1, day=1)
-            data_fim = hoje
-            periodo_label = f'Ano de {hoje.year}'
-            periodo = 'ano_atual'
-    else:
-        data_inicio = hoje.replace(month=1, day=1)
-        periodo_label = f'Ano de {hoje.year}'
-    
-    hidrometros = lote.hidrometros.filter(ativo=True)
-    
-    if not hidrometros.exists():
-        return HttpResponse("Nenhum hidrômetro ativo encontrado para este lote.", status=404)
-    
-    # Calcular consumo no periodo
-    nomes_meses = [
-        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-    ]
-    consumo_total_periodo = 0.0
-    consumo_por_dia = {}
-    consumo_por_mes = {}
-
-    for hidrometro in hidrometros:
-        # Buscar última leitura ANTES do período (para ter base de comparação)
-        leitura_anterior_periodo = hidrometro.leituras.filter(
-            data_leitura__date__lt=data_inicio
-        ).order_by('-data_leitura').first()
-
-        # Preparar leituras do período
-        leituras_periodo = list(hidrometro.leituras.filter(
-            data_leitura__date__gte=data_inicio,
-            data_leitura__date__lte=data_fim
-        ).order_by('data_leitura'))
-
-        # Combinar (anterior + período)
-        if leitura_anterior_periodo:
-            leituras_para_calculo = [leitura_anterior_periodo] + leituras_periodo
-        else:
-            leituras_para_calculo = leituras_periodo
-
-        for i in range(1, len(leituras_para_calculo)):
-            leitura_atual = leituras_para_calculo[i]
-            leitura_anterior = leituras_para_calculo[i - 1]
-
-            # Só contabilizar se a leitura ATUAL estiver dentro do período filtrado
-            if leitura_atual.data_leitura.date() < data_inicio:
-                continue
-
-            diferenca = float(leitura_atual.leitura - leitura_anterior.leitura)
-            if diferenca <= 0:
-                continue
-
-            consumo_litros = diferenca * 1000
-            consumo_total_periodo += consumo_litros
-
-            dia = leitura_atual.data_leitura.date()
-            consumo_por_dia[dia] = consumo_por_dia.get(dia, 0.0) + consumo_litros
-
-            mes_key = (leitura_atual.data_leitura.year, leitura_atual.data_leitura.month)
-            consumo_por_mes[mes_key] = consumo_por_mes.get(mes_key, 0.0) + consumo_litros
-
-    datas_periodo = []
-    dia_cursor = data_inicio
-    while dia_cursor <= data_fim:
-        datas_periodo.append(dia_cursor)
-        consumo_por_dia.setdefault(dia_cursor, 0.0)
-        dia_cursor += timedelta(days=1)
-
-    # Sempre exibir todos os 12 meses do ano atual
-    ano_atual = hoje.year
-    meses_periodo = [(ano_atual, mes) for mes in range(1, 13)]
-    # Garantir que todos os meses tenham valor 0 se não houver consumo
-    for mes in range(1, 13):
-        consumo_por_mes.setdefault((ano_atual, mes), 0.0)
-    
-    
-    # Criar Excel
-    wb = Workbook()
-    
-    # Aba: Resumo
-    ws_resumo = wb.active
-    ws_resumo.title = "Resumo"
-    
-    # Título
-    ws_resumo['A1'] = f'Relatório de Consumo - Lote {lote.numero} ({periodo_label})'
-    ws_resumo['A1'].font = Font(size=16, bold=True, color='FFFFFF')
-    ws_resumo['A1'].fill = PatternFill(start_color='3498db', end_color='3498db', fill_type='solid')
-    ws_resumo['A1'].alignment = Alignment(horizontal='center')
-    ws_resumo.merge_cells('A1:C1')
-    
-    ws_resumo['A2'] = (
-        f'Tipo: {lote.get_tipo_display()} | Período: {data_inicio.strftime("%d/%m/%Y")} '
-        f'a {data_fim.strftime("%d/%m/%Y")} | Gerado em: {agora.strftime("%d/%m/%Y %H:%M")}'
-    )
-    ws_resumo['A2'].alignment = Alignment(horizontal='center')
-    ws_resumo.merge_cells('A2:C2')
-    
-    # Dados resumo
-    ws_resumo['A4'] = 'Indicador'
-    ws_resumo['B4'] = 'Valor'
-    ws_resumo['A4'].font = Font(bold=True)
-    ws_resumo['B4'].font = Font(bold=True)
-    
-    resumo_dados = [
-        ['Lote', lote.numero],
-        ['Tipo', lote.get_tipo_display()],
-        ['Período', periodo_label],
-        ['Consumo Total no Período', f'{consumo_total_periodo:,.0f} L'],
-        ['Hidrometros Ativos', hidrometros.count()],
-    ]
-    
-    for idx, (indicador, valor) in enumerate(resumo_dados, start=5):
-        ws_resumo[f'A{idx}'] = indicador
-        ws_resumo[f'B{idx}'] = valor
-    
-    ws_resumo.column_dimensions['A'].width = 30
-    ws_resumo.column_dimensions['B'].width = 20
-    
-    # Aba: Consumo Mensal
-    ws_mensal = wb.create_sheet("Consumo Mensal")
-    
-    ws_mensal['A1'] = 'Mês'
-    ws_mensal['B1'] = 'Consumo (L)'
-    ws_mensal['A1'].font = Font(bold=True)
-    ws_mensal['B1'].font = Font(bold=True)
-    
-    for idx, (ano, mes) in enumerate(meses_periodo, start=2):
-        ws_mensal[f'A{idx}'] = f'{nomes_meses[mes - 1]}/{str(ano)[-2:]}'
-        ws_mensal[f'B{idx}'] = round(consumo_por_mes.get((ano, mes), 0.0), 2)
-    
-    # Gerar gráfico com matplotlib (igual ao PDF)
-    plt.figure(figsize=(12, 6))
-    meses_labels = [f'{nomes_meses[mes - 1]}/{str(ano)[-2:]}' for (ano, mes) in meses_periodo]
-    valores_mensais = [consumo_por_mes.get((ano, mes), 0.0) for (ano, mes) in meses_periodo]
-    plt.bar(meses_labels, valores_mensais, color='#27ae60', alpha=0.7)
-    plt.title(f'Consumo Mensal - Lote {lote.numero} (Litros)', fontsize=14, fontweight='bold')
-    plt.xlabel('Mês', fontsize=11)
-    plt.ylabel('Consumo (L)', fontsize=11)
-    plt.xticks(rotation=45, ha='right')
-    plt.grid(axis='y', alpha=0.3)
-    plt.tight_layout()
-    
-    # Salvar gráfico em buffer
-    img_buffer_mensal = io.BytesIO()
-    plt.savefig(img_buffer_mensal, format='png', dpi=100, bbox_inches='tight')
-    img_buffer_mensal.seek(0)
-    plt.close()
-    
-    # Adicionar imagem ao Excel
-    from openpyxl.drawing.image import Image as XLImage
-    img_mensal = XLImage(img_buffer_mensal)
-    img_mensal.width = 600
-    img_mensal.height = 300
-    ws_mensal.add_image(img_mensal, "D2")
-    
-    ws_mensal.column_dimensions['A'].width = 15
-    ws_mensal.column_dimensions['B'].width = 15
-    
-    # Aba: Consumo Diário
-    ws_diario_lote = wb.create_sheet("Consumo Diário")
-    
-    ws_diario_lote['A1'] = 'Dia'
-    ws_diario_lote['B1'] = 'Consumo (L)'
-    ws_diario_lote['A1'].font = Font(bold=True)
-    ws_diario_lote['B1'].font = Font(bold=True)
-    
-    for idx, dia in enumerate(datas_periodo, start=2):
-        ws_diario_lote[f'A{idx}'] = dia.strftime('%d/%m/%Y')
-        ws_diario_lote[f'B{idx}'] = round(consumo_por_dia.get(dia, 0.0), 2)
-    
-    # Gerar gráfico com matplotlib (igual ao PDF)
-    plt.figure(figsize=(12, 6))
-    dias_labels = [d.strftime('%d/%m') for d in datas_periodo]
-    valores_diarios_lote = [consumo_por_dia.get(d, 0.0) for d in datas_periodo]
-    plt.plot(dias_labels, valores_diarios_lote, marker='o', color='#3498db', linewidth=2, markersize=4)
-    plt.title(f'Consumo Diário - Lote {lote.numero} ({periodo_label})', fontsize=14, fontweight='bold')
-    plt.xlabel('Dia', fontsize=11)
-    plt.ylabel('Consumo (L)', fontsize=11)
-    plt.xticks(rotation=45, ha='right')
-    plt.grid(axis='y', alpha=0.3)
-    plt.tight_layout()
-    
-    # Salvar gráfico em buffer
-    img_buffer_diario_lote = io.BytesIO()
-    plt.savefig(img_buffer_diario_lote, format='png', dpi=100, bbox_inches='tight')
-    img_buffer_diario_lote.seek(0)
-    plt.close()
-    
-    # Adicionar imagem ao Excel
-    img_diario_lote = XLImage(img_buffer_diario_lote)
-    img_diario_lote.width = 600
-    img_diario_lote.height = 300
-    ws_diario_lote.add_image(img_diario_lote, "D2")
-    
-    ws_diario_lote.column_dimensions['A'].width = 15
-    ws_diario_lote.column_dimensions['B'].width = 15
-
-    leituras_periodo = Leitura.objects.filter(
-        hidrometro__lote=lote,
-        data_leitura__date__gte=data_inicio,
-        data_leitura__date__lte=data_fim
-    ).select_related('hidrometro').order_by('data_leitura')
-
-    ws_leituras = wb.create_sheet("Leituras")
-    ws_leituras['A1'] = 'Data/Hora'
-    ws_leituras['B1'] = 'Hidrômetro'
-    ws_leituras['C1'] = 'Leitura (m³)'
-    ws_leituras['D1'] = 'Consumo (L)'
-    ws_leituras['E1'] = 'Responsável'
-    ws_leituras['F1'] = 'Observações'
-    ws_leituras['G1'] = 'Foto'
-
-    for col in ['A1', 'B1', 'C1', 'D1', 'E1', 'F1', 'G1']:
-        ws_leituras[col].font = Font(bold=True)
-
-    for idx, leitura in enumerate(leituras_periodo, start=2):
-        consumo_litros = leitura.consumo_desde_ultima_leitura_litros()
-        ws_leituras[f'A{idx}'] = leitura.data_leitura.strftime('%d/%m/%Y %H:%M')
-        ws_leituras[f'B{idx}'] = leitura.hidrometro.numero
-        ws_leituras[f'C{idx}'] = float(leitura.leitura)
-        ws_leituras[f'D{idx}'] = round(consumo_litros, 2)
-        ws_leituras[f'E{idx}'] = leitura.responsavel or 'N/A'
-        ws_leituras[f'F{idx}'] = leitura.observacoes or '—'
-
-        if leitura.foto:
-            foto_path = getattr(leitura.foto, 'path', '')
-            if foto_path and os.path.exists(foto_path):
-                img = XLImage(foto_path)
-                img.width = 120
-                img.height = 90
-                ws_leituras.add_image(img, f'G{idx}')
-                ws_leituras.row_dimensions[idx].height = 70
-
-    ws_leituras.column_dimensions['A'].width = 18
-    ws_leituras.column_dimensions['B'].width = 15
-    ws_leituras.column_dimensions['C'].width = 14
-    ws_leituras.column_dimensions['D'].width = 14
-    ws_leituras.column_dimensions['E'].width = 18
-    ws_leituras.column_dimensions['F'].width = 40
-    ws_leituras.column_dimensions['G'].width = 22
-    
-    # Salvar e retornar
-    buffer = io.BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    
-    response = HttpResponse(
-        buffer.getvalue(),
-        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    )
-    response['Content-Disposition'] = (
-        f'attachment; filename="relatorio_lote_{lote.numero}_{data_inicio.strftime("%Y%m%d")}_'
-        f'{data_fim.strftime("%Y%m%d")}.xlsx"'
-    )
-    
-    return response
 

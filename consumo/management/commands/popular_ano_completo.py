@@ -107,4 +107,4 @@ class Command(BaseCommand):
         self.stdout.write(self.style.WARNING(f'💡 Agora você pode visualizar:'))
         self.stdout.write(self.style.WARNING(f'   - Gráficos mensais e anuais completos'))
         self.stdout.write(self.style.WARNING(f'   - Consumo detalhado por hidrômetro'))
-        self.stdout.write(self.style.WARNING(f'   - Relatórios PDF/Excel com dados reais'))
+        self.stdout.write(self.style.WARNING(f'   - Relatórios PDF com dados reais'))
