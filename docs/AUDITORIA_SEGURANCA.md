@@ -165,7 +165,7 @@
 ```bash
 # Testes
 python manage.py test                          # Executar todos os testes
-python manage.py test consumo.tests.test_api   # Testes API específicos
+python manage.py check --deploy                # Checklist de produção
 
 # Dados
 python manage.py popular_estrutura             # Popular lotes/hidrômetros
