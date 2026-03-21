@@ -670,6 +670,8 @@ def detalhes_hidrometro(request, hidrometro_id):
 def graficos_consumo(request):
     """Página com gráficos de consumo do condomínio com filtro de período."""
 
+    LIMITE_MENSAL_LITROS = 14000
+
     agora = timezone.localtime(timezone.now())
     ultima_coleta = Leitura.objects.filter(
         hidrometro__ativo=True,
@@ -734,15 +736,22 @@ def graficos_consumo(request):
         periodo_label = f"Ano Atual ({ano_atual})"
     
     data_fim = hoje
+    ano_referencia_mensal = data_fim.year if periodo_selecionado == 'personalizado' else ano_atual
+    data_inicio_grafico_mensal = data_inicio_dias
+    if periodo_selecionado == 'personalizado':
+        data_inicio_grafico_mensal = timezone.datetime(
+            ano_referencia_mensal, 1, 1, 0, 0, 0, tzinfo=data_fim.tzinfo
+        )
 
     dados_graficos = {
         'consumo_mes': [],
         'consumo_total_ano': 0.0,
-        'top_lotes': [],
+        'lotes_acima_limite_mensal': [],
+        'limite_mensal_litros': LIMITE_MENSAL_LITROS,
         'consumo_por_hidrometro': [],
         'periodo_label': periodo_label,
         'periodo_selecionado': periodo_selecionado,
-        'ano_atual': ano_atual,
+        'ano_atual': ano_referencia_mensal,
     }
 
     hidrometros_qs = Hidrometro.objects.filter(
@@ -752,7 +761,7 @@ def graficos_consumo(request):
 
     consumo_mensal = {mes: 0.0 for mes in range(1, 13)}
     consumo_total_ano = 0.0
-    consumo_por_lote_ano = {}
+    consumo_por_lote_mes = {}
     consumo_por_hidrometro = []
 
     leituras_stream = (
@@ -796,10 +805,6 @@ def graficos_consumo(request):
             leitura_anterior_valor = leitura_valor
             continue
 
-        if leitura_data < data_inicio_dias:
-            leitura_anterior_valor = leitura_valor
-            continue
-
         consumo_m3 = float(leitura_valor - leitura_anterior_valor)
         leitura_anterior_valor = leitura_valor
 
@@ -807,13 +812,15 @@ def graficos_consumo(request):
             continue
 
         consumo_litros = consumo_m3 * 1000
-        consumo_total_ano += consumo_litros
-        consumo_hidrometro_litros += consumo_litros
+        if leitura_data >= data_inicio_dias:
+            consumo_total_ano += consumo_litros
+            consumo_hidrometro_litros += consumo_litros
 
-        consumo_por_lote_ano.setdefault(lote_atual_numero, 0.0)
-        consumo_por_lote_ano[lote_atual_numero] += consumo_litros
+            chave_lote_mes = (lote_atual_numero, leitura_data.year, leitura_data.month)
+            consumo_por_lote_mes.setdefault(chave_lote_mes, 0.0)
+            consumo_por_lote_mes[chave_lote_mes] += consumo_litros
 
-        if leitura_data.year == ano_atual:
+        if leitura_data >= data_inicio_grafico_mensal and leitura_data.year == ano_referencia_mensal:
             consumo_mensal[leitura_data.month] += consumo_litros
 
     if hidrometro_atual_id is not None and consumo_hidrometro_litros > 0:
@@ -831,16 +838,32 @@ def graficos_consumo(request):
     for mes in range(1, 13):
         dados_graficos['consumo_mes'].append({
             'mes': mes,
-            'mes_nome': f"{nomes_meses[mes - 1]}/{str(ano_atual)[-2:]}",
+            'mes_nome': f"{nomes_meses[mes - 1]}/{str(ano_referencia_mensal)[-2:]}",
             'consumo_litros': round(consumo_mensal[mes], 2)
         })
 
     dados_graficos['consumo_total_ano'] = round(consumo_total_ano, 2)
 
-    top_lotes = sorted(consumo_por_lote_ano.items(), key=lambda x: x[1], reverse=True)[:10]
-    dados_graficos['top_lotes'] = [
-        {'lote': lote, 'consumo_litros': round(consumo, 2)} for lote, consumo in top_lotes
-    ]
+    excedentes_por_lote = {}
+    for (lote, ano, mes), consumo_litros in consumo_por_lote_mes.items():
+        if consumo_litros <= LIMITE_MENSAL_LITROS:
+            continue
+
+        excedente_atual = excedentes_por_lote.get(lote)
+        if (not excedente_atual) or (consumo_litros > excedente_atual['consumo_litros']):
+            excedentes_por_lote[lote] = {
+                'lote': lote,
+                'ano': ano,
+                'mes': mes,
+                'mes_nome': f"{nomes_meses[mes - 1]}/{str(ano)[-2:]}",
+                'consumo_litros': round(consumo_litros, 2),
+            }
+
+    dados_graficos['lotes_acima_limite_mensal'] = sorted(
+        excedentes_por_lote.values(),
+        key=lambda item: item['consumo_litros'],
+        reverse=True,
+    )
 
     def _ordenar_lote(item):
         numero = item['lote']
@@ -1028,6 +1051,8 @@ def graficos_lote(request, lote_id):
 
 def exportar_graficos_consumo_pdf(request):
     """Exporta os gráficos de consumo do condomínio em PDF"""
+    LIMITE_MENSAL_LITROS = 14000
+
     import os
     os.environ.setdefault('MPLCONFIGDIR', '/tmp/matplotlib')
     import matplotlib
@@ -1105,6 +1130,7 @@ def exportar_graficos_consumo_pdf(request):
     # Consumo por hidrômetro (individual) no período
     consumo_por_hidrometro = []
     consumo_total_periodo = 0.0
+    consumo_por_lote_mes = {}
     
     for hidrometro in hidrometros:
         # Buscar última leitura ANTES do período (para ter base de comparação)
@@ -1140,6 +1166,10 @@ def exportar_graficos_consumo_pdf(request):
             consumo_litros = consumo_m3 * 1000
             consumo_hidrometro_litros += consumo_litros
             consumo_total_periodo += consumo_litros
+
+            chave_lote_mes = (hidrometro.lote.numero, leitura_atual.data_leitura.year, leitura_atual.data_leitura.month)
+            consumo_por_lote_mes.setdefault(chave_lote_mes, 0.0)
+            consumo_por_lote_mes[chave_lote_mes] += consumo_litros
                 
         if consumo_hidrometro_litros > 0:
             consumo_por_hidrometro.append({
@@ -1147,53 +1177,26 @@ def exportar_graficos_consumo_pdf(request):
                 'lote': hidrometro.lote.numero,
                 'consumo_litros': round(consumo_hidrometro_litros, 2),
             })
-    
-    # Top 10 lotes por consumo (baseado no período filtrado)
-    lotes_consumo = []
-    for lote in Lote.objects.filter(ativo=True, tipo='residencial'):
-        consumo_lote = 0.0
-        hidrometros_lote = lote.hidrometros.filter(ativo=True)
-        
-        for hidrometro in hidrometros_lote:
-            # Buscar última leitura ANTES do período
-            leitura_anterior_periodo = hidrometro.leituras.filter(
-                data_leitura__lt=data_inicio_dias
-            ).order_by('-data_leitura').first()
 
-            # Preparar leituras do período
-            leituras_periodo = list(hidrometro.leituras.filter(
-                data_leitura__gte=data_inicio_dias,
-                data_leitura__lte=data_fim
-            ).order_by('data_leitura'))
+    nomes_meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+    lotes_acima_limite = {}
+    for (lote_numero, ano, mes), consumo_litros in consumo_por_lote_mes.items():
+        if consumo_litros <= LIMITE_MENSAL_LITROS:
+            continue
 
-            # Combinar (anterior + período)
-            if leitura_anterior_periodo:
-                leituras_para_calculo = [leitura_anterior_periodo] + leituras_periodo
-            else:
-                leituras_para_calculo = leituras_periodo
-            
-            if len(leituras_para_calculo) >= 2:
-                for i in range(1, len(leituras_para_calculo)):
-                    leitura_atual = leituras_para_calculo[i]
-                    leitura_anterior = leituras_para_calculo[i - 1]
+        atual = lotes_acima_limite.get(lote_numero)
+        if (not atual) or (consumo_litros > atual['consumo_litros']):
+            lotes_acima_limite[lote_numero] = {
+                'lote': lote_numero,
+                'mes_nome': f"{nomes_meses[mes - 1]}/{str(ano)[-2:]}",
+                'consumo_litros': round(consumo_litros, 2),
+            }
 
-                    # Só contabilizar se a leitura ATUAL estiver dentro do período filtrado
-                    if leitura_atual.data_leitura < data_inicio_dias:
-                        continue
-
-                    consumo_m3 = float(leitura_atual.leitura - leitura_anterior.leitura)
-                    if consumo_m3 > 0:
-                        consumo_litros = consumo_m3 * 1000
-                        consumo_lote += consumo_litros
-        
-        if consumo_lote > 0:
-            lotes_consumo.append({
-                'lote': lote,
-                'consumo': consumo_lote
-            })
-    
-    lotes_consumo.sort(key=lambda x: x['consumo'], reverse=True)
-    top_lotes = lotes_consumo[:10]
+    lotes_acima_limite_lista = sorted(
+        lotes_acima_limite.values(),
+        key=lambda item: item['consumo_litros'],
+        reverse=True,
+    )
 
     # Ordenar hidrômetros por lote (numéricos primeiro, depois ADM)
     def _ordenar_lote(item):
@@ -1286,21 +1289,22 @@ def exportar_graficos_consumo_pdf(request):
     elements.append(resumo_table)
     elements.append(Spacer(1, 0.4*inch))
     
-    # Top 10 Lotes
-    elements.append(Paragraph("🏆 Top 10 Lotes com Maior Consumo", heading_style))
-    
-    top_data = [['Posição', 'Lote', 'Tipo', 'Consumo (L)']]
-    for idx, item in enumerate(top_lotes, 1):
-        lote = item['lote']
-        consumo = item['consumo']
-        top_data.append([
-            str(idx),
-            lote.numero,
-            lote.get_tipo_display(),
-            f'{consumo:,.0f}'
-        ])
-    
-    top_table = Table(top_data, colWidths=[1*inch, 1.5*inch, 1.5*inch, 2*inch])
+    # Lotes com excedente mensal
+    elements.append(Paragraph(f"⚠️ Lotes com consumo mensal acima de {LIMITE_MENSAL_LITROS:,.0f} L", heading_style))
+
+    top_data = [['Posição', 'Lote', 'Mês de Referência', 'Maior Consumo Mensal (L)']]
+    if lotes_acima_limite_lista:
+        for idx, item in enumerate(lotes_acima_limite_lista, 1):
+            top_data.append([
+                str(idx),
+                item['lote'],
+                item['mes_nome'],
+                f"{item['consumo_litros']:,.0f}",
+            ])
+    else:
+        top_data.append(['-', '-', '-', 'Nenhum lote excedeu o limite no período'])
+
+    top_table = Table(top_data, colWidths=[1*inch, 1.5*inch, 2*inch, 2.5*inch])
     top_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e74c3c')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -1318,13 +1322,13 @@ def exportar_graficos_consumo_pdf(request):
     elements.append(top_table)
     elements.append(Spacer(1, 0.3*inch))
     
-    # Gráfico Top 10 Lotes
-    if top_lotes:
+    # Gráfico de excedentes mensais por lote
+    if lotes_acima_limite_lista:
         plt.figure(figsize=(10, 5))
-        lotes_labels = [item['lote'].numero for item in top_lotes]
-        lotes_valores = [item['consumo'] for item in top_lotes]
+        lotes_labels = [f"Lote {item['lote']} ({item['mes_nome']})" for item in lotes_acima_limite_lista]
+        lotes_valores = [item['consumo_litros'] for item in lotes_acima_limite_lista]
         plt.barh(lotes_labels[::-1], lotes_valores[::-1], color='#e74c3c', alpha=0.7)
-        plt.title(f'Top 10 Lotes - Consumo ({periodo_label})', fontsize=14, fontweight='bold')
+        plt.title(f'Lotes acima de {LIMITE_MENSAL_LITROS:,.0f} L/mês ({periodo_label})', fontsize=14, fontweight='bold')
         plt.xlabel('Consumo (L)', fontsize=11)
         plt.ylabel('Lote', fontsize=11)
         plt.grid(axis='x', alpha=0.3)
