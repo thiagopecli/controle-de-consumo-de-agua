@@ -758,61 +758,73 @@ def graficos_consumo(request):
     consumo_por_lote_ano = {}
     consumo_por_hidrometro = []
 
-    for hidrometro in hidrometros_qs:
-        # Buscar última leitura ANTES do período (para ter base de comparação)
-        leitura_anterior_periodo = hidrometro.leituras.filter(
-            data_leitura__lt=data_inicio_dias
-        ).order_by('-data_leitura').first()
+    leituras_stream = (
+        Leitura.objects.filter(
+            hidrometro__ativo=True,
+            hidrometro__lote__tipo='residencial',
+            data_leitura__lte=data_fim,
+        )
+        .order_by('hidrometro_id', 'data_leitura')
+        .values('hidrometro_id', 'data_leitura', 'leitura', 'hidrometro__numero', 'hidrometro__lote__numero')
+        .iterator(chunk_size=2000)
+    )
 
-        # Buscar leituras do período filtrado para calcular o consumo total
-        leituras_periodo = list(hidrometro.leituras.filter(
-            data_leitura__gte=data_inicio_dias,
-            data_leitura__lte=data_fim
-        ).order_by('data_leitura'))
+    hidrometro_atual_id = None
+    hidrometro_atual_numero = None
+    lote_atual_numero = None
+    leitura_anterior_valor = None
+    consumo_hidrometro_litros = 0.0
 
-        # Combinar: última leitura anterior + leituras do período
-        if leitura_anterior_periodo:
-            leituras_ano = [leitura_anterior_periodo] + leituras_periodo
-        else:
-            leituras_ano = leituras_periodo
+    for leitura in leituras_stream:
+        leitura_hidrometro_id = leitura['hidrometro_id']
+        leitura_data = leitura['data_leitura']
+        leitura_valor = leitura['leitura']
 
-        consumo_hidrometro_litros = 0.0
-        if len(leituras_ano) < 2:
+        if leitura_hidrometro_id != hidrometro_atual_id:
+            if hidrometro_atual_id is not None and consumo_hidrometro_litros > 0:
+                consumo_por_hidrometro.append({
+                    'hidrometro': hidrometro_atual_numero,
+                    'lote': lote_atual_numero,
+                    'consumo_litros': round(consumo_hidrometro_litros, 2),
+                })
+
+            hidrometro_atual_id = leitura_hidrometro_id
+            hidrometro_atual_numero = leitura['hidrometro__numero']
+            lote_atual_numero = leitura['hidrometro__lote__numero']
+            leitura_anterior_valor = leitura_valor
+            consumo_hidrometro_litros = 0.0
             continue
 
-        # Calcular consumo do período (para total e top lotes)
-        for i in range(1, len(leituras_ano)):
-            leitura_atual = leituras_ano[i]
-            leitura_anterior = leituras_ano[i - 1]
+        if leitura_anterior_valor is None:
+            leitura_anterior_valor = leitura_valor
+            continue
 
-            consumo_m3 = float(leitura_atual.leitura - leitura_anterior.leitura)
-            if consumo_m3 < 0:
-                continue
+        if leitura_data < data_inicio_dias:
+            leitura_anterior_valor = leitura_valor
+            continue
 
-            # Só contabilizar se a leitura ATUAL estiver dentro do período filtrado
-            if leitura_atual.data_leitura < data_inicio_dias:
-                continue
+        consumo_m3 = float(leitura_valor - leitura_anterior_valor)
+        leitura_anterior_valor = leitura_valor
 
-            consumo_litros = consumo_m3 * 1000
-            consumo_total_ano += consumo_litros
-            consumo_hidrometro_litros += consumo_litros
+        if consumo_m3 <= 0:
+            continue
 
-            # Consumo por lote (período)
-            numero_lote = leitura_atual.hidrometro.lote.numero
-            consumo_por_lote_ano.setdefault(numero_lote, 0.0)
-            consumo_por_lote_ano[numero_lote] += consumo_litros
+        consumo_litros = consumo_m3 * 1000
+        consumo_total_ano += consumo_litros
+        consumo_hidrometro_litros += consumo_litros
 
-            # Consumo por mês do ano atual (sempre Jan-Dez no gráfico mensal)
-            if leitura_atual.data_leitura.year == ano_atual:
-                mes = leitura_atual.data_leitura.month
-                consumo_mensal[mes] += consumo_litros
+        consumo_por_lote_ano.setdefault(lote_atual_numero, 0.0)
+        consumo_por_lote_ano[lote_atual_numero] += consumo_litros
 
-        if consumo_hidrometro_litros > 0:
-            consumo_por_hidrometro.append({
-                'hidrometro': hidrometro.numero,
-                'lote': hidrometro.lote.numero,
-                'consumo_litros': round(consumo_hidrometro_litros, 2),
-            })
+        if leitura_data.year == ano_atual:
+            consumo_mensal[leitura_data.month] += consumo_litros
+
+    if hidrometro_atual_id is not None and consumo_hidrometro_litros > 0:
+        consumo_por_hidrometro.append({
+            'hidrometro': hidrometro_atual_numero,
+            'lote': lote_atual_numero,
+            'consumo_litros': round(consumo_hidrometro_litros, 2),
+        })
 
     nomes_meses = [
         'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
@@ -927,107 +939,54 @@ def graficos_lote(request, lote_id):
         }
         return render(request, 'consumo/graficos_lote.html', context)
     
-    # Calcular consumo total no período para todos os hidrômetros do lote
-    consumo_total_periodo = 0
-    
-    for hidrometro in hidrometros:
-        # Buscar última leitura ANTES do período
-        leitura_anterior_periodo = hidrometro.leituras.filter(
-            data_leitura__date__lt=data_inicio
-        ).order_by('-data_leitura').first()
-
-        # Preparar leituras ordenadas (combinar anterior + período)
-        leituras_para_calculo = list(hidrometro.leituras.filter(
-            data_leitura__date__gte=data_inicio,
-            data_leitura__date__lte=data_fim
-        ).order_by('data_leitura'))
-
-        if leitura_anterior_periodo:
-            leituras_para_calculo = [leitura_anterior_periodo] + leituras_para_calculo
-
-        for i in range(1, len(leituras_para_calculo)):
-            leitura_atual = leituras_para_calculo[i]
-            leitura_anterior = leituras_para_calculo[i - 1]
-
-            # Só contabilizar se a leitura ATUAL estiver dentro do período filtrado
-            if leitura_atual.data_leitura.date() < data_inicio:
-                continue
-
-            diferenca = float(leitura_atual.leitura) - float(leitura_anterior.leitura)
-            if diferenca > 0:
-                consumo_litros = diferenca * 1000
-                consumo_total_periodo += consumo_litros
-    
-    # Preparar dados para gráficos
-    # Gráfico 1: Consumo por Dia
+    # Calcula uma única vez para reduzir carga de banco e evitar timeout.
+    consumo_total_periodo = 0.0
     consumo_por_dia = defaultdict(float)
-    
-    for hidrometro in hidrometros:
-        # Buscar última leitura ANTES do período
-        leitura_anterior_periodo = hidrometro.leituras.filter(
-            data_leitura__date__lt=data_inicio
-        ).order_by('-data_leitura').first()
+    consumo_por_mes = {mes: 0.0 for mes in range(1, 13)}
 
-        # Preparar leituras ordenadas (combinar anterior + período)
-        leituras_para_calculo = list(hidrometro.leituras.filter(
-            data_leitura__date__gte=data_inicio,
-            data_leitura__date__lte=data_fim
-        ).order_by('data_leitura'))
+    leituras_lote = (
+        Leitura.objects.filter(
+            hidrometro__lote=lote,
+            hidrometro__ativo=True,
+            data_leitura__date__lte=data_fim,
+        )
+        .order_by('hidrometro_id', 'data_leitura')
+        .values('hidrometro_id', 'data_leitura', 'leitura')
+        .iterator(chunk_size=1000)
+    )
 
-        if leitura_anterior_periodo:
-            leituras_para_calculo = [leitura_anterior_periodo] + leituras_para_calculo
+    hidrometro_atual_id = None
+    leitura_anterior = None
 
-        for i in range(1, len(leituras_para_calculo)):
-            leitura_atual = leituras_para_calculo[i]
-            leitura_anterior = leituras_para_calculo[i - 1]
+    for leitura in leituras_lote:
+        if leitura['hidrometro_id'] != hidrometro_atual_id:
+            hidrometro_atual_id = leitura['hidrometro_id']
+            leitura_anterior = leitura
+            continue
 
-            # Só contabilizar se a leitura ATUAL estiver dentro do período filtrado
-            if leitura_atual.data_leitura.date() < data_inicio:
-                continue
+        if leitura_anterior is None:
+            leitura_anterior = leitura
+            continue
 
-            diferenca = float(leitura_atual.leitura) - float(leitura_anterior.leitura)
-            if diferenca > 0:
-                consumo_litros = diferenca * 1000
-                dia_str = leitura_atual.data_leitura.strftime('%d/%m')
-                consumo_por_dia[dia_str] += consumo_litros
-    
+        if leitura['data_leitura'].date() < data_inicio:
+            leitura_anterior = leitura
+            continue
+
+        diferenca = float(leitura['leitura']) - float(leitura_anterior['leitura'])
+        leitura_anterior = leitura
+
+        if diferenca <= 0:
+            continue
+
+        consumo_litros = diferenca * 1000
+        consumo_total_periodo += consumo_litros
+        consumo_por_dia[leitura['data_leitura'].strftime('%d/%m')] += consumo_litros
+        consumo_por_mes[leitura['data_leitura'].month] += consumo_litros
+
     consumo_dia_lista = [
         {'dia': dia, 'consumo_litros': consumo}
         for dia, consumo in sorted(consumo_por_dia.items())
     ]
-    
-    # Gráfico 2: Consumo por Mês (sempre exibe todos os 12 meses)
-    # Inicializar todos os meses com 0
-    consumo_por_mes = {mes: 0.0 for mes in range(1, 13)}
-    
-    for hidrometro in hidrometros:
-        # Buscar última leitura ANTES do período
-        leitura_anterior_periodo = hidrometro.leituras.filter(
-            data_leitura__date__lt=data_inicio
-        ).order_by('-data_leitura').first()
-
-        # Preparar leituras ordenadas (combinar anterior + período)
-        leituras_para_calculo = list(hidrometro.leituras.filter(
-            data_leitura__date__gte=data_inicio,
-            data_leitura__date__lte=data_fim
-        ).order_by('data_leitura'))
-
-        if leitura_anterior_periodo:
-            leituras_para_calculo = [leitura_anterior_periodo] + leituras_para_calculo
-
-        for i in range(1, len(leituras_para_calculo)):
-            leitura_atual = leituras_para_calculo[i]
-            leitura_anterior = leituras_para_calculo[i - 1]
-
-            # Só contabilizar se a leitura ATUAL estiver dentro do período filtrado
-            if leitura_atual.data_leitura.date() < data_inicio:
-                continue
-
-            diferenca = float(leitura_atual.leitura) - float(leitura_anterior.leitura)
-            if diferenca > 0:
-                consumo_litros = diferenca * 1000
-                mes_numero = leitura_atual.data_leitura.month
-                consumo_por_mes[mes_numero] += consumo_litros
     
     # Sempre exibir todos os 12 meses em português
     consumo_mes_lista = []
