@@ -9,7 +9,7 @@ from consumo.models import Leitura, Lote
 from consumo.services.relatorios_cache import (
     calcular_data_coleta,
     caminho_pdf_lote,
-    intervalo_anual_da_coleta,
+    intervalo_mensal_da_coleta,
     montar_url_publica_arquivo_media,
     pasta_relatorios_coleta,
 )
@@ -74,10 +74,9 @@ class Command(BaseCommand):
                     usar_relatorios_pregerados = False
 
         if usar_relatorios_pregerados:
-            data_inicio, data_fim = intervalo_anual_da_coleta(data_coleta)
+            data_inicio, data_fim = intervalo_mensal_da_coleta(data_coleta)
         else:
-            data_inicio = data_referencia.replace(day=1)
-            data_fim = data_referencia
+            data_inicio, data_fim = intervalo_mensal_da_coleta(data_coleta)
 
         lotes = Lote.objects.filter(ativo=True, tipo="residencial").order_by("numero")
         if not lotes.exists():
@@ -209,20 +208,32 @@ class Command(BaseCommand):
     def _calcular_consumo_lote_litros(self, lote, data_inicio, data_fim):
         consumo_total_m3 = Decimal("0")
         for hidrometro in lote.hidrometros.filter(ativo=True).only("id"):
-            leituras = Leitura.objects.filter(
+            leitura_anterior_periodo = Leitura.objects.filter(
+                hidrometro=hidrometro,
+                data_leitura__date__lt=data_inicio,
+            ).order_by("-data_leitura").first()
+
+            leituras_periodo = list(Leitura.objects.filter(
                 hidrometro=hidrometro,
                 data_leitura__date__gte=data_inicio,
                 data_leitura__date__lte=data_fim,
-            ).order_by("data_leitura")
-            if leituras.count() < 2:
-                continue
-            primeira = leituras.first()
-            ultima = leituras.last()
-            if not primeira or not ultima:
-                continue
-            delta = ultima.leitura - primeira.leitura
-            if delta > 0:
-                consumo_total_m3 += delta
+            ).order_by("data_leitura"))
+
+            if leitura_anterior_periodo:
+                leituras_para_calculo = [leitura_anterior_periodo] + leituras_periodo
+            else:
+                leituras_para_calculo = leituras_periodo
+
+            for i in range(1, len(leituras_para_calculo)):
+                leitura_atual = leituras_para_calculo[i]
+                leitura_anterior = leituras_para_calculo[i - 1]
+
+                if leitura_atual.data_leitura.date() < data_inicio:
+                    continue
+
+                delta = leitura_atual.leitura - leitura_anterior.leitura
+                if delta > 0:
+                    consumo_total_m3 += delta
         return int(consumo_total_m3 * Decimal("1000"))
 
     def _montar_url_relatorio(self, lote_id):

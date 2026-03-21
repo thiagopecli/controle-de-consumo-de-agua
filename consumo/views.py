@@ -1329,7 +1329,7 @@ def exportar_graficos_consumo_pdf(request):
             str(idx),
             lote.numero,
             lote.get_tipo_display(),
-            f'{consumo:,.2f}'
+            f'{consumo:,.0f}'
         ])
     
     top_table = Table(top_data, colWidths=[1*inch, 1.5*inch, 1.5*inch, 2*inch])
@@ -2075,7 +2075,7 @@ def exportar_graficos_lote_pdf(request, lote_id):
     mensal_data = [['Mês', 'Consumo (L)']]
     for (ano, mes) in meses_periodo:
         mes_nome = f'{nomes_meses[mes - 1]}/{str(ano)[-2:]}'
-        mensal_data.append([mes_nome, f'{consumo_por_mes.get((ano, mes), 0.0):,.2f}'])
+        mensal_data.append([mes_nome, f'{consumo_por_mes.get((ano, mes), 0.0):,.0f}'])
     
     mensal_table = Table(mensal_data, colWidths=[2*inch, 2*inch])
     mensal_table.setStyle(TableStyle([

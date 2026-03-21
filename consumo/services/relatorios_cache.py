@@ -23,6 +23,16 @@ def intervalo_anual_da_coleta(data_coleta):
     return date(data_coleta.year, 1, 1), data_coleta
 
 
+def intervalo_mensal_da_coleta(data_coleta):
+    """Retorna o ciclo de leitura de 16 do mês anterior até 15 do mês da coleta."""
+    ano = data_coleta.year
+    mes = data_coleta.month - 1
+    if mes == 0:
+        mes = 12
+        ano -= 1
+    return date(ano, mes, 16), data_coleta
+
+
 def nome_arquivo_relatorio_lote(lote_numero, data_inicio, data_fim):
     return (
         f"relatorio_lote_{lote_numero}_"

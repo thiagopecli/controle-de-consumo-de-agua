@@ -16,7 +16,7 @@ from consumo.models import Lote, Leitura
 from consumo.services.relatorios_cache import (
     calcular_data_coleta,
     caminho_pdf_lote,
-    intervalo_anual_da_coleta,
+    intervalo_mensal_da_coleta,
     pasta_relatorios_coleta,
 )
 
@@ -68,7 +68,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         data_coleta = self._resolver_data_coleta(options.get("data_coleta"))
-        data_inicio, data_fim = intervalo_anual_da_coleta(data_coleta)
+        data_inicio, data_fim = intervalo_mensal_da_coleta(data_coleta)
         pasta_saida = pasta_relatorios_coleta(data_coleta)
         pasta_saida.mkdir(parents=True, exist_ok=True)
 
