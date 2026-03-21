@@ -910,6 +910,12 @@ def graficos_lote(request, lote_id):
     else:
         data_inicio = hoje.replace(month=1, day=1)
         periodo_label = f'Ano de {hoje.year}'
+
+    # No período personalizado, o gráfico mensal deve exibir comparativo
+    # desde o início do ano até a data final selecionada.
+    data_inicio_grafico_mensal = data_inicio
+    if periodo == 'personalizado':
+        data_inicio_grafico_mensal = data_fim.replace(month=1, day=1)
     
     # Obter todos os hidrômetros do lote
     hidrometros = lote.hidrometros.filter(ativo=True)
@@ -965,20 +971,21 @@ def graficos_lote(request, lote_id):
             leitura_anterior = leitura
             continue
 
-        if leitura['data_leitura'].date() < data_inicio:
-            leitura_anterior = leitura
-            continue
-
         diferenca = float(leitura['leitura']) - float(leitura_anterior['leitura'])
         leitura_anterior = leitura
 
         if diferenca <= 0:
             continue
 
+        data_leitura_atual = leitura['data_leitura'].date()
         consumo_litros = diferenca * 1000
-        consumo_total_periodo += consumo_litros
-        consumo_por_dia[leitura['data_leitura'].strftime('%d/%m')] += consumo_litros
-        consumo_por_mes[leitura['data_leitura'].month] += consumo_litros
+
+        if data_leitura_atual >= data_inicio:
+            consumo_total_periodo += consumo_litros
+            consumo_por_dia[leitura['data_leitura'].strftime('%d/%m')] += consumo_litros
+
+        if data_leitura_atual >= data_inicio_grafico_mensal:
+            consumo_por_mes[leitura['data_leitura'].month] += consumo_litros
 
     consumo_dia_lista = [
         {'dia': dia, 'consumo_litros': consumo}
@@ -1614,6 +1621,11 @@ def exportar_graficos_lote_pdf(request, lote_id):
     else:
         data_inicio = hoje.replace(month=1, day=1)
         periodo_label = f'Ano de {hoje.year}'
+
+    # No período personalizado, incluir meses anteriores do ano para comparação no gráfico mensal.
+    data_inicio_grafico_mensal = data_inicio
+    if periodo == 'personalizado':
+        data_inicio_grafico_mensal = data_fim.replace(month=1, day=1)
     
     hidrometros = list(lote.hidrometros.filter(ativo=True).only('id', 'numero'))
     
@@ -1634,6 +1646,10 @@ def exportar_graficos_lote_pdf(request, lote_id):
         datetime.combine(data_inicio, datetime.min.time()),
         tz_atual
     )
+    inicio_grafico_mensal_dt = timezone.make_aware(
+        datetime.combine(data_inicio_grafico_mensal, datetime.min.time()),
+        tz_atual
+    )
     fim_periodo_dt = timezone.make_aware(
         datetime.combine(data_fim, datetime.max.time()),
         tz_atual
@@ -1643,7 +1659,7 @@ def exportar_graficos_lote_pdf(request, lote_id):
         Leitura.objects.filter(
             hidrometro__lote=lote,
             hidrometro__ativo=True,
-            data_leitura__gte=inicio_periodo_dt,
+            data_leitura__gte=inicio_grafico_mensal_dt,
             data_leitura__lte=fim_periodo_dt
         )
         .select_related('hidrometro')
@@ -1659,7 +1675,7 @@ def exportar_graficos_lote_pdf(request, lote_id):
         leitura_anterior = (
             Leitura.objects.filter(
                 hidrometro=hidrometro,
-                data_leitura__lt=inicio_periodo_dt
+                data_leitura__lt=inicio_grafico_mensal_dt
             )
             .only('leitura', 'data_leitura', 'hidrometro_id')
             .order_by('-data_leitura')
@@ -1685,13 +1701,17 @@ def exportar_graficos_lote_pdf(request, lote_id):
                 continue
 
             consumo_litros = diferenca * 1000
-            consumo_total_periodo += consumo_litros
+            data_leitura_atual = leitura_atual.data_leitura.date()
 
-            dia = leitura_atual.data_leitura.date()
-            consumo_por_dia[dia] = consumo_por_dia.get(dia, 0.0) + consumo_litros
+            if data_leitura_atual >= data_inicio:
+                consumo_total_periodo += consumo_litros
 
-            mes_key = (leitura_atual.data_leitura.year, leitura_atual.data_leitura.month)
-            consumo_por_mes[mes_key] = consumo_por_mes.get(mes_key, 0.0) + consumo_litros
+                dia = data_leitura_atual
+                consumo_por_dia[dia] = consumo_por_dia.get(dia, 0.0) + consumo_litros
+
+            if data_leitura_atual >= data_inicio_grafico_mensal:
+                mes_key = (leitura_atual.data_leitura.year, leitura_atual.data_leitura.month)
+                consumo_por_mes[mes_key] = consumo_por_mes.get(mes_key, 0.0) + consumo_litros
 
     datas_periodo = []
     dia_cursor = data_inicio
@@ -1700,12 +1720,12 @@ def exportar_graficos_lote_pdf(request, lote_id):
         consumo_por_dia.setdefault(dia_cursor, 0.0)
         dia_cursor += timedelta(days=1)
 
-    # Sempre exibir todos os 12 meses do ano atual
-    ano_atual = hoje.year
-    meses_periodo = [(ano_atual, mes) for mes in range(1, 13)]
+    # Sempre exibir todos os 12 meses do ano de referência do filtro.
+    ano_referencia = data_fim.year if periodo == 'personalizado' else hoje.year
+    meses_periodo = [(ano_referencia, mes) for mes in range(1, 13)]
     # Garantir que todos os meses tenham valor 0 se não houver consumo
     for mes in range(1, 13):
-        consumo_por_mes.setdefault((ano_atual, mes), 0.0)
+        consumo_por_mes.setdefault((ano_referencia, mes), 0.0)
     
     
     # Criar PDF
