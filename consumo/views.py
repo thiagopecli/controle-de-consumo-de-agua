@@ -12,6 +12,7 @@ from datetime import timedelta, datetime
 import json
 import io
 import os
+import hmac
 import zipfile
 import glob
 from openpyxl import Workbook
@@ -354,7 +355,10 @@ def pregerar_relatorios_job(request):
     token_configurado = os.getenv('JOB_SECRET_TOKEN', '').strip()
     token_recebido = (request.headers.get('X-Job-Token') or '').strip()
 
-    if token_configurado and token_recebido != token_configurado:
+    if not token_configurado:
+        return JsonResponse({'erro': 'Servico indisponivel: JOB_SECRET_TOKEN nao configurado'}, status=503)
+
+    if not token_recebido or not hmac.compare_digest(token_recebido, token_configurado):
         return JsonResponse({'erro': 'Nao autorizado'}, status=401)
 
     data_coleta = request.GET.get('data_coleta') or request.POST.get('data_coleta')
