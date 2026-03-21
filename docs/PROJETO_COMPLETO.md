@@ -190,6 +190,13 @@ O sistema suporta:
 - ✅ Leituras ilimitadas (2x dia cada)
 - ✅ Upload de fotos
 
+## 📲 Ciclo de Relatório Mensal (WhatsApp)
+
+- Pré-geração dos PDFs: dia 15.
+- Envio para moradores: dia 20.
+- Período de referência usado no envio: 16 do mês anterior até 15 do mês atual de coleta.
+- Exemplo: coleta em 15/02/2026 considera leituras de 16/01/2026 a 15/02/2026.
+
 ## 💾 Comando de Backup
 
 Foi criado um comando customizado para popular dados:

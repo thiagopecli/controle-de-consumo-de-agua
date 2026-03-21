@@ -12,7 +12,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--lote", default="A-101", help="Identificação do lote")
-        parser.add_argument("--inicio", default="01/02/2026", help="Data inicial do período")
+        parser.add_argument("--inicio", default="16/01/2026", help="Data inicial do período")
         parser.add_argument("--fim", default="15/02/2026", help="Data final do período")
         parser.add_argument("--consumo", default="12450", help="Consumo em litros")
         parser.add_argument(
@@ -33,7 +33,7 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--pdf-url",
-            default="http://127.0.0.1:8000/lotes/1/graficos/exportar/pdf/?periodo=ano_atual",
+            default="http://127.0.0.1:8000/lotes/1/graficos/exportar/pdf/?periodo=personalizado&data_inicio=2026-01-16&data_fim=2026-02-15",
             help="URL pública do PDF para envio via Z-API",
         )
 

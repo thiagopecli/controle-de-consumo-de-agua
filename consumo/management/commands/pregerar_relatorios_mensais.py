@@ -23,7 +23,7 @@ from consumo.services.relatorios_cache import (
 
 class Command(BaseCommand):
     help = (
-        "Pregera relatorios anuais em PDF dos lotes residenciais e salva em pasta "
+        "Pregera relatorios mensais em PDF dos lotes residenciais (ciclo 16 a 15) e salva em pasta "
         "datada (dia 15), para envio no dia 20 sem sobrecarga."
     )
 
@@ -95,7 +95,7 @@ class Command(BaseCommand):
         erros = 0
 
         self.stdout.write(
-            "Pregerando relatorios anuais "
+            "Pregerando relatorios mensais "
             f"({data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}) "
             f"para {lotes.count()} lote(s) em {pasta_saida}"
         )
