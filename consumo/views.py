@@ -358,6 +358,7 @@ def pregerar_relatorios_job(request):
         return JsonResponse({'erro': 'Nao autorizado'}, status=401)
 
     data_coleta = request.GET.get('data_coleta') or request.POST.get('data_coleta')
+    lote_numero = request.GET.get('lote_numero') or request.POST.get('lote_numero')
     sobrescrever_raw = request.GET.get('sobrescrever') or request.POST.get('sobrescrever')
     sobrescrever = str(sobrescrever_raw).lower() in {'1', 'true', 'yes', 'sim'}
 
@@ -365,6 +366,8 @@ def pregerar_relatorios_job(request):
     kwargs = {'stdout': output, 'stderr': output}
     if data_coleta:
         kwargs['data_coleta'] = data_coleta
+    if lote_numero:
+        kwargs['lote_numero'] = lote_numero
     if sobrescrever:
         kwargs['sobrescrever'] = True
 

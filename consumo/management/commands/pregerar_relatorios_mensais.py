@@ -37,6 +37,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Sobrescreve PDFs ja existentes na pasta de destino.",
         )
+        parser.add_argument(
+            "--lote-numero",
+            default=None,
+            help="Gera apenas para um lote especifico (ex: 287).",
+        )
 
     def handle(self, *args, **options):
         data_coleta = self._resolver_data_coleta(options.get("data_coleta"))
@@ -45,6 +50,10 @@ class Command(BaseCommand):
         pasta_saida.mkdir(parents=True, exist_ok=True)
 
         lotes = Lote.objects.filter(ativo=True, tipo="residencial").order_by("numero")
+        lote_numero = (options.get("lote_numero") or "").strip()
+        if lote_numero:
+            lotes = lotes.filter(numero=lote_numero)
+
         if not lotes.exists():
             raise CommandError(
                 "Nenhum lote residencial ativo encontrado para o periodo "
