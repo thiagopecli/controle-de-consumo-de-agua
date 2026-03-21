@@ -17,9 +17,6 @@
             <a href="{% url 'consumo:exportar_graficos_lote_pdf' lote.id %}?{{ request.GET.urlencode }}" class="btn btn-primary" style="background: #e74c3c;">
                 📄 Baixar PDF
             </a>
-            <a href="{% url 'consumo:exportar_graficos_lote_excel' lote.id %}?{{ request.GET.urlencode }}" class="btn btn-primary" style="background: #27ae60;">
-                📊 Baixar Excel
-            </a>
             <a href="{% url 'consumo:listar_hidrometros' %}" class="btn btn-secondary">
                 ← Voltar para Lista
             </a>

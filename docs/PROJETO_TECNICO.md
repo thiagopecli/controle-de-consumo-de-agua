@@ -4,7 +4,7 @@ Este documento descreve a arquitetura completa, modelos, regras de negócio, API
 
 ## 1. Visão Geral
 - **Objetivo:** Monitorar consumo de água em 310 lotes residenciais e 10 hidrômetros administrativos, com leituras 2x ao dia, relatórios e gráficos.
-- **Stack:** Python 3.x, Django 5, Django REST Framework, PostgreSQL (produção), SQLite (dev/test), HTML/CSS/JS, Matplotlib, ReportLab, openpyxl.
+- **Stack:** Python 3.x, Django 5, Django REST Framework, PostgreSQL (produção), SQLite (dev/test), HTML/CSS/JS, Matplotlib e ReportLab.
 - **Projeto:** `hidrometro_project` (configuração) e app `consumo` (domínio).
 - **Base Web:** Interface HTML com páginas de dashboard, listagens e gráficos, além de exportação de relatórios.
 - **Base API:** Endpoints REST para `Lote`, `Hidrometro`, `Leitura` + ações especializadas.
@@ -13,7 +13,7 @@ Este documento descreve a arquitetura completa, modelos, regras de negócio, API
 - **Camada de Dados:** Modelos Django em `consumo/models.py` com relações, validações e ordenação padrão.
 - **Camada de API:** ViewSets DRF em `consumo/views.py` e roteamento em `consumo/urls.py` via `DefaultRouter` (prefixo `/api/`).
 - **Camada de Interface:** Views HTML em `consumo/views.py`, templates em `templates/consumo/`, estáticos em `static/` e `staticfiles/`.
-- **Relatórios:** Geração de PDF e Excel em views específicas utilizando ReportLab, Matplotlib e openpyxl.
+- **Relatórios:** Geração de PDF em views específicas utilizando ReportLab e Matplotlib.
 - **Comandos de Gestão:** Scripts em `consumo/management/commands/` para popular/limpar dados.
 - **Configuração:** `hidrometro_project/settings.py` controla DB, estáticos, media, DRF e CORS.
 
@@ -91,11 +91,9 @@ media/                # Uploads (fotos de leituras)
 ## 7. Relatórios e Exportações
 - **Condomínio:**
   - `exportar_graficos_consumo_pdf`: PDF com resumo, consumo diário e top 10 lotes.
-  - `exportar_graficos_consumo_excel`: Excel com abas: Resumo, Consumo Diário, Top 10 Lotes, Consumo por Hidrômetro.
 - **Lote específico:**
-  - `exportar_graficos_lote_pdf`: PDF com consumo mensal, diário do mês vigente e distribuição por período (pizza).
-  - `exportar_graficos_lote_excel`: Excel com abas: Resumo, Consumo Mensal, Consumo Diário (mês vigente).
-- Bibliotecas: ReportLab (PDF), openpyxl (Excel), Matplotlib (gráficos incorporados como imagens).
+  - `exportar_graficos_lote_pdf`: PDF com consumo mensal e detalhamento de leituras no período.
+- Bibliotecas: ReportLab (PDF) e Matplotlib (gráficos incorporados como imagens).
 
 ## 8. Comandos de Manutenção (Management Commands)
 Local: `consumo/management/commands/`

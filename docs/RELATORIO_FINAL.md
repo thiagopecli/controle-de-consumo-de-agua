@@ -80,7 +80,6 @@ O Sistema de Controle de Consumo de Água foi submetido a testes completos e abr
 - ✅ Gráficos de consumo
 - ✅ Gráficos por lote
 - ✅ Exportação PDF
-- ✅ Exportação Excel
 
 ### 8. **Testes de Cálculos**
 - ✅ Consumo desde última leitura (m³)
