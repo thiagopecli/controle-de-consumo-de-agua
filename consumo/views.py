@@ -1,8 +1,10 @@
 from django.shortcuts import render, get_object_or_404
 from django.utils import timezone
 from django.db.models import Sum, Avg, Max, Min, Count, Q, Case, When, Value, IntegerField
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.conf import settings
+from django.core.management import call_command
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -338,6 +340,55 @@ def service_worker(request):
     )
     response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return response
+
+
+@csrf_exempt
+def pregerar_relatorios_job(request):
+    """
+    Endpoint interno para disparar pregeração de PDFs no serviço web.
+    Assim os arquivos são gerados onde o disco persistente e as fotos existem.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'erro': 'Metodo nao permitido'}, status=405)
+
+    token_configurado = os.getenv('JOB_SECRET_TOKEN', '').strip()
+    token_recebido = (request.headers.get('X-Job-Token') or '').strip()
+
+    if token_configurado and token_recebido != token_configurado:
+        return JsonResponse({'erro': 'Nao autorizado'}, status=401)
+
+    data_coleta = request.GET.get('data_coleta') or request.POST.get('data_coleta')
+    lote_numero = request.GET.get('lote_numero') or request.POST.get('lote_numero')
+    sobrescrever_raw = request.GET.get('sobrescrever') or request.POST.get('sobrescrever')
+    sobrescrever = str(sobrescrever_raw).lower() in {'1', 'true', 'yes', 'sim'}
+
+    output = io.StringIO()
+    kwargs = {'stdout': output, 'stderr': output}
+    if data_coleta:
+        kwargs['data_coleta'] = data_coleta
+    if lote_numero:
+        kwargs['lote_numero'] = lote_numero
+    if sobrescrever:
+        kwargs['sobrescrever'] = True
+
+    try:
+        call_command('pregerar_relatorios_mensais', **kwargs)
+    except Exception as exc:  # noqa: BLE001
+        return JsonResponse(
+            {
+                'ok': False,
+                'erro': str(exc),
+                'output': output.getvalue(),
+            },
+            status=500,
+        )
+
+    return JsonResponse(
+        {
+            'ok': True,
+            'output': output.getvalue(),
+        }
+    )
 
 
 def listar_hidrometros(request):
