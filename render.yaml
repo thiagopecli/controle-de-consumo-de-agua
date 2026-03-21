@@ -85,7 +85,7 @@ services:
     # Render usa UTC: 11:00 UTC = 08:00 no horário de Brasília
     schedule: "0 11 20 * *"
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "python manage.py enviar_whatsapp_mensal --enviar-pdf --sem-fallback-texto --obrigar-relatorios-pregerados"
+    startCommand: "python manage.py enviar_whatsapp_mensal --enviar-pdf --sem-fallback-texto --obrigar-relatorios-pregerados --intervalo-segundos 5"
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.2
