@@ -1,12 +1,24 @@
 import json
 import os
 import re
+from pathlib import Path
 
 import requests
 
 
 class ConfiguracaoWhatsAppInvalida(Exception):
     pass
+
+
+def _montar_mensagem_resumo_consumo(lote, data_inicio, data_fim, consumo_litros, url_relatorio):
+    return (
+        f"Olá! 💧 Segue o resumo mensal de consumo de água do Lote {lote}.\n\n"
+        f"📅 Período: {data_inicio} a {data_fim}\n"
+        f"📊 Consumo Total: {consumo_litros} litros\n\n"
+        "⚠️ Esta é uma mensagem automática. Em caso de dúvidas, por favor, entre em contato diretamente com a administração.\n\n"
+        "Atenciosamente,\n"
+        "Condomínio Pedra de Inoã"
+    )
 
 
 def normalizar_numero_whatsapp(valor):
@@ -77,15 +89,12 @@ def enviar_resumo_consumo_whatsapp(
             "Defina ZAPI_WHATSAPP_TO no .env ou informe o destino no envio."
         )
 
-    mensagem = (
-            f"Olá! 💧 Segue o resumo mensal de consumo de água do *Lote {lote}*.\n\n"
-            f"📅 *Período:* {data_inicio} a {data_fim}\n"
-            f"📊 *Consumo Total:* {consumo_litros} litros\n\n"
-            f"📄 *Acesse seu relatório detalhado em PDF no link abaixo:*\n"
-            f"{url_relatorio}\n\n"
-            f"⚠️ _Esta é uma mensagem automática. Em caso de dúvidas, por favor, entre em contato diretamente com a administração._\n\n"
-            f"Atenciosamente,\n"
-            f"*Condomínio Residencial Pedra de Inoã*"
+    mensagem = _montar_mensagem_resumo_consumo(
+        lote=lote,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        consumo_litros=consumo_litros,
+        url_relatorio=url_relatorio,
     )
 
     endpoint = (
@@ -155,18 +164,31 @@ def enviar_relatorio_pdf_whatsapp(
 
     endpoint = (
         "https://api.z-api.io/instances/"
-        f"{config['instance_id']}/token/{config['instance_token']}/send-document"
+        f"{config['instance_id']}/token/{config['instance_token']}/send-document/pdf"
     )
     nome_arquivo = (
         f"relatorio_lote_{lote}_{str(data_inicio).replace('/', '-')}_{str(data_fim).replace('/', '-')}.pdf"
     )
+    document_ref = url_pdf
+    if url_pdf and str(url_pdf).lower().endswith(".pdf"):
+        caminho_local = Path(str(url_pdf))
+        if caminho_local.exists() and caminho_local.is_file():
+            import base64
+
+            with open(caminho_local, "rb") as pdf_file:
+                encoded_b64 = base64.b64encode(pdf_file.read()).decode("ascii")
+            document_ref = f"data:application/pdf;base64,{encoded_b64}"
+
     payload = {
         "phone": destino,
-        "document": url_pdf,
+        "document": document_ref,
         "fileName": nome_arquivo,
-        "caption": (
-            f"Relatório PDF do lote {lote} ({data_inicio} até {data_fim}). "
-            f"Consumo: {consumo_litros} litros."
+        "caption": _montar_mensagem_resumo_consumo(
+            lote=lote,
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            consumo_litros=consumo_litros,
+            url_relatorio=url_relatorio,
         ),
     }
     headers = {
@@ -186,6 +208,15 @@ def enviar_relatorio_pdf_whatsapp(
             data = response.json()
         except Exception:
             data = {}
+
+        if data.get("error"):
+            raise RuntimeError(
+                f"Falha ao enviar PDF para a Z-API: {data.get('message') or data.get('error')}"
+            )
+
+        if not (data.get("messageId") or data.get("id") or data.get("zaapId")):
+            raise RuntimeError("Resposta inesperada da Z-API no envio de PDF (sem identificador de mensagem).")
+
         return {
             "sid": data.get("zaapId") or data.get("messageId") or data.get("id"),
             "status": data.get("status") or "sent",

@@ -1,8 +1,10 @@
 from django.shortcuts import render, get_object_or_404
 from django.utils import timezone
 from django.db.models import Sum, Avg, Max, Min, Count, Q, Case, When, Value, IntegerField
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.conf import settings
+from django.core.management import call_command
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -338,6 +340,52 @@ def service_worker(request):
     )
     response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return response
+
+
+@csrf_exempt
+def pregerar_relatorios_job(request):
+    """
+    Endpoint interno para disparar pregeração de PDFs no serviço web.
+    Assim os arquivos são gerados onde o disco persistente e as fotos existem.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'erro': 'Metodo nao permitido'}, status=405)
+
+    token_configurado = os.getenv('JOB_SECRET_TOKEN', '').strip()
+    token_recebido = (request.headers.get('X-Job-Token') or '').strip()
+
+    if token_configurado and token_recebido != token_configurado:
+        return JsonResponse({'erro': 'Nao autorizado'}, status=401)
+
+    data_coleta = request.GET.get('data_coleta') or request.POST.get('data_coleta')
+    sobrescrever_raw = request.GET.get('sobrescrever') or request.POST.get('sobrescrever')
+    sobrescrever = str(sobrescrever_raw).lower() in {'1', 'true', 'yes', 'sim'}
+
+    output = io.StringIO()
+    kwargs = {'stdout': output, 'stderr': output}
+    if data_coleta:
+        kwargs['data_coleta'] = data_coleta
+    if sobrescrever:
+        kwargs['sobrescrever'] = True
+
+    try:
+        call_command('pregerar_relatorios_mensais', **kwargs)
+    except Exception as exc:  # noqa: BLE001
+        return JsonResponse(
+            {
+                'ok': False,
+                'erro': str(exc),
+                'output': output.getvalue(),
+            },
+            status=500,
+        )
+
+    return JsonResponse(
+        {
+            'ok': True,
+            'output': output.getvalue(),
+        }
+    )
 
 
 def listar_hidrometros(request):
@@ -2114,41 +2162,56 @@ def exportar_graficos_lote_pdf(request, lote_id):
     elements.append(Spacer(1, 0.3*inch))
 
     leituras_com_foto = [leitura for leitura in leituras_periodo if leitura.foto]
+    buffers_fotos_pdf = []
     if leituras_com_foto:
         elements.append(PageBreak())
         elements.append(Paragraph("📷 Fotos das Leituras", heading_style))
         for leitura in leituras_com_foto:
             try:
-                # Verificar se a foto existe e é acessível
                 if not leitura.foto:
                     continue
-                    
-                # Tentar obter o caminho absoluto da foto
-                foto_path = None
-                if hasattr(leitura.foto, 'path'):
-                    foto_path = leitura.foto.path
-                    # Garantir caminho absoluto
-                    if not os.path.isabs(foto_path):
-                        foto_path = os.path.join(settings.MEDIA_ROOT, foto_path)
-                elif hasattr(leitura.foto, 'file'):
-                    foto_file = leitura.foto.file.name
-                    if not os.path.isabs(foto_file):
-                        foto_path = os.path.join(settings.MEDIA_ROOT, foto_file)
+
+                foto_source = None
+
+                # Prioriza stream do storage (funciona com storage remoto e local).
+                try:
+                    leitura.foto.open('rb')
+                    conteudo = leitura.foto.read()
+                    if conteudo:
+                        foto_buffer = io.BytesIO(conteudo)
+                        buffers_fotos_pdf.append(foto_buffer)
+                        foto_source = foto_buffer
+                except Exception:
+                    foto_source = None
+                finally:
+                    try:
+                        leitura.foto.close()
+                    except Exception:
+                        pass
+
+                # Fallback para caminho de arquivo local quando disponível.
+                if foto_source is None:
+                    foto_path = None
+                    if hasattr(leitura.foto, 'path'):
+                        foto_path = leitura.foto.path
+                        if not os.path.isabs(foto_path):
+                            foto_path = os.path.join(settings.MEDIA_ROOT, foto_path)
+                    elif hasattr(leitura.foto, 'file'):
+                        foto_file = leitura.foto.file.name
+                        if not os.path.isabs(foto_file):
+                            foto_path = os.path.join(settings.MEDIA_ROOT, foto_file)
+                        else:
+                            foto_path = foto_file
+
+                    if foto_path and os.path.exists(foto_path):
+                        foto_source = foto_path
                     else:
-                        foto_path = foto_file
-                        
-                # Se não conseguiu o caminho ou arquivo não existe, pular
-                if not foto_path:
+                        alt_path = os.path.join(settings.MEDIA_ROOT, str(leitura.foto))
+                        if os.path.exists(alt_path):
+                            foto_source = alt_path
+
+                if foto_source is None:
                     continue
-                    
-                # Verificar se arquivo existe
-                if not os.path.exists(foto_path):
-                    # Tentar caminho alternativo
-                    alt_path = os.path.join(settings.MEDIA_ROOT, str(leitura.foto))
-                    if os.path.exists(alt_path):
-                        foto_path = alt_path
-                    else:
-                        continue
                     
                 legenda = (
                     f"Hidrômetro {leitura.hidrometro.numero} - "
@@ -2159,7 +2222,7 @@ def exportar_graficos_lote_pdf(request, lote_id):
                 
                 # Adicionar foto com tratamento de erro
                 try:
-                    img_foto = Image(foto_path, width=6.5*inch, height=3.8*inch)
+                    img_foto = Image(foto_source, width=6.5*inch, height=3.8*inch)
                     elements.append(img_foto)
                 except Exception as img_error:
                     # Se falhar ao carregar imagem, adicionar nota
@@ -2189,6 +2252,12 @@ def exportar_graficos_lote_pdf(request, lote_id):
         f'{data_fim.strftime("%Y%m%d")}.pdf"'
     )
     
+    for foto_buffer in buffers_fotos_pdf:
+        try:
+            foto_buffer.close()
+        except Exception:
+            pass
+
     return response
 
 
