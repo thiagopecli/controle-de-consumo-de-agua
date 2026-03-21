@@ -1,10 +1,18 @@
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from consumo.models import Leitura, Lote
+from consumo.services.relatorios_cache import (
+    calcular_data_coleta,
+    caminho_pdf_lote,
+    intervalo_anual_da_coleta,
+    montar_url_publica_arquivo_media,
+    pasta_relatorios_coleta,
+)
 from consumo.services.whatsapp import (
     ConfiguracaoWhatsAppInvalida,
     enviar_relatorio_pdf_whatsapp,
@@ -14,7 +22,7 @@ from consumo.services.whatsapp import (
 
 
 class Command(BaseCommand):
-    help = "Envia resumo mensal por WhatsApp para todos os lotes residenciais ativos"
+    help = "Envia resumo por WhatsApp para lotes residenciais ativos (preferencialmente via PDFs pregerados do dia 15)"
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -43,11 +51,73 @@ class Command(BaseCommand):
             action="store_true",
             help="Quando usar --enviar-pdf, não envia mensagem de texto em caso de falha no PDF",
         )
+        parser.add_argument(
+            "--pasta-relatorios",
+            default=None,
+            help="Caminho da pasta com PDFs pregerados (opcional).",
+        )
+        parser.add_argument(
+            "--nao-usar-relatorios-pregerados",
+            action="store_true",
+            help="Desativa uso de cache de PDFs e gera URL dinamica como antes.",
+        )
+        parser.add_argument(
+            "--obrigar-relatorios-pregerados",
+            action="store_true",
+            help="Falha se nao encontrar pasta/PDF pregerado para envio.",
+        )
 
     def handle(self, *args, **options):
         data_referencia = self._resolver_data_referencia(options.get("data_referencia"))
-        data_inicio = data_referencia.replace(day=1)
-        data_fim = data_referencia
+        usar_relatorios_pregerados = not options["nao_usar_relatorios_pregerados"]
+        data_coleta = calcular_data_coleta(data_referencia)
+        cache_remoto_habilitado = self._cache_remoto_habilitado()
+
+        if usar_relatorios_pregerados and not options["enviar_pdf"]:
+            self.stdout.write(
+                self.style.WARNING(
+                    "[AVISO] Relatorios pregerados detectados: habilitando envio em PDF automaticamente."
+                )
+            )
+            options["enviar_pdf"] = True
+
+        pasta_cache = None
+        cache_obrigatorio = options["obrigar_relatorios_pregerados"] or data_referencia.day >= 20
+        if usar_relatorios_pregerados:
+            if options["pasta_relatorios"]:
+                pasta_cache = Path(options["pasta_relatorios"]).expanduser().resolve()
+            else:
+                pasta_cache = pasta_relatorios_coleta(data_coleta)
+
+            if not pasta_cache.exists():
+                if cache_obrigatorio and not cache_remoto_habilitado:
+                    raise CommandError(
+                        "Pasta de relatorios pregerados nao encontrada: "
+                        f"{pasta_cache}. Execute antes: python manage.py pregerar_relatorios_mensais "
+                        f"--data-coleta {data_coleta.strftime('%Y-%m-%d')}"
+                    )
+
+                if cache_remoto_habilitado:
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"[AVISO] Pasta local de relatorios nao encontrada ({pasta_cache}). "
+                            "Seguindo com cache remoto via APP_BASE_URL."
+                        )
+                    )
+                else:
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"[AVISO] Pasta de relatorios pregerados nao encontrada ({pasta_cache}). "
+                            "Seguindo com URLs dinamicas."
+                        )
+                    )
+                    usar_relatorios_pregerados = False
+
+        if usar_relatorios_pregerados:
+            data_inicio, data_fim = intervalo_anual_da_coleta(data_coleta)
+        else:
+            data_inicio = data_referencia.replace(day=1)
+            data_fim = data_referencia
 
         lotes = Lote.objects.filter(ativo=True, tipo="residencial").order_by("numero")
         if not lotes.exists():
@@ -56,15 +126,46 @@ class Command(BaseCommand):
         enviados = 0
         falhas = 0
         ignorados_sem_whatsapp = 0
+        ignorados_sem_pdf_cache = 0
+
+        origem_pdf_msg = (
+            f"cache em {pasta_cache}" if usar_relatorios_pregerados else "URL dinamica"
+        )
 
         self.stdout.write(
-            f"Processando {lotes.count()} lotes: período {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}"
+            f"Processando {lotes.count()} lotes: período {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')} "
+            f"| Origem PDF: {origem_pdf_msg}"
         )
 
         for lote in lotes:
             consumo_litros = self._calcular_consumo_lote_litros(lote, data_inicio, data_fim)
             url_relatorio = self._montar_url_relatorio(lote.id)
             url_pdf = self._montar_url_relatorio_pdf(lote.id, data_inicio, data_fim)
+
+            if usar_relatorios_pregerados:
+                caminho_pdf = caminho_pdf_lote(pasta_cache, lote.numero, data_inicio, data_fim)
+                if not caminho_pdf.exists():
+                    if cache_remoto_habilitado:
+                        # No cron do Render não há disco; usar URL remota no web.
+                        url_pdf = montar_url_publica_arquivo_media(caminho_pdf)
+                    elif cache_obrigatorio:
+                        ignorados_sem_pdf_cache += 1
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f"[AVISO] Lote {lote.numero} sem PDF no cache ({caminho_pdf})."
+                            )
+                        )
+                        continue
+
+                    if not cache_remoto_habilitado:
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f"[AVISO] Lote {lote.numero} sem PDF no cache. Usando URL dinamica."
+                            )
+                        )
+                else:
+                    url_pdf = montar_url_publica_arquivo_media(caminho_pdf)
+
             destinos_lote = self._resolver_destinos_lote(lote, options["to_whatsapp"])
 
             if not destinos_lote:
@@ -132,12 +233,29 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Finalizado. Enviados: {enviados} | Ignorados sem WhatsApp: {ignorados_sem_whatsapp} | Falhas: {falhas}"
+                "Finalizado. "
+                f"Enviados: {enviados} | Ignorados sem WhatsApp: {ignorados_sem_whatsapp} "
+                f"| Ignorados sem PDF cache: {ignorados_sem_pdf_cache} | Falhas: {falhas}"
             )
         )
 
         if falhas > 0:
             raise CommandError("Execução finalizada com falhas. Verifique os erros acima.")
+
+    def _cache_remoto_habilitado(self):
+        from django.conf import settings
+
+        base_url = getattr(settings, "APP_BASE_URL", None)
+        if not base_url:
+            import os
+
+            base_url = os.getenv("APP_BASE_URL", "")
+
+        base_url = (base_url or "").strip().lower()
+        if not base_url:
+            return False
+
+        return not ("127.0.0.1" in base_url or "localhost" in base_url)
 
     def _resolver_destinos_lote(self, lote, destino_forcado=None):
         if destino_forcado:
