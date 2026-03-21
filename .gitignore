@@ -18,6 +18,17 @@ db.sqlite3-journal
 media/
 staticfiles/
 
+# Relatorios e artefatos temporarios
+docs/relatorio_pregeracao_render_*.csv
+docs/relatorio_pregeracao_render_*.json
+relatorio_lote_*_*.pdf
+auditoria_local_vs_render_*.csv
+relacao_importacao_*.csv
+*_periodo.py
+run_tests.py
+relatorio_verificacao.py
+*.tmp.html
+
 # Environment
 .env
 

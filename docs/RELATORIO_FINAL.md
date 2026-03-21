@@ -174,9 +174,9 @@ O aplicativo está:
 ## 📚 DOCUMENTAÇÃO GERADA
 
 1. **AUDITORIA_SEGURANCA.md** - Relatório detalhado de segurança
-2. **relatorio_verificacao.py** - Script de verificação interativa
-3. **consumo/tests/test_integridade_seguranca.py** - Testes adicionais
-4. **consumo/management/commands/limpar_leituras_producao.py** - Comando de limpeza
+2. **PROJETO_TECNICO.md** - Arquitetura e guia técnico
+3. **PROJETO_COMPLETO.md** - Visão geral funcional do sistema
+4. **RELATORIO_RESPONSIVIDADE_2026-02-20.md** - Validação de layout responsivo
 
 ---
 
@@ -193,7 +193,7 @@ python manage.py limpar_leituras_producao --all --confirm  # Limpar
 
 # Verificação
 python manage.py check                  # Verificar integridade
-python relatorio_verificacao.py         # Gerar relatório
+python manage.py check --deploy         # Checklist de segurança para produção
 
 # Servidor
 python manage.py runserver              # Iniciar em localhost:8000

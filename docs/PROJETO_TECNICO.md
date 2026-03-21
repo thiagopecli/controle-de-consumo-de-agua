@@ -132,17 +132,13 @@ Arquivo: `hidrometro_project/settings.py`
 - **Servidor:** `python manage.py runserver` (dev) ou WSGI (prod) com reverse proxy.
 
 ## 11. Testes
-- Local: `consumo/tests/` com testes para API, gráficos e views HTML.
-- Execução:
+- Esta versão de produção foi enxugada e não inclui a suíte automatizada versionada.
+- Recomendação operacional: manter e executar os testes em branch/ambiente de homologação antes de cada publicação.
+- Verificação mínima no pacote de produção:
 ```
-python manage.py test consumo
+python manage.py check
+python manage.py check --deploy
 ```
-- Coberturas principais:
-  - Validação de criação de leitura (não-decrecente).
-  - Bulk de leituras com retorno de sucesso/erro.
-  - Últimas leituras endpoint.
-  - Filtros de hidrômetro `lote` e `ativo`.
-  - Ações de período e estatísticas.
 
 ## 12. Segurança e Boas Práticas (Produção)
 - **Autenticação:** adicionar JWT (`django-rest-framework-simplejwt`).
