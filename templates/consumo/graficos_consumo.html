@@ -106,7 +106,11 @@
             </h3>
             <canvas id="chartConsumoMes"></canvas>
             <p style="font-size: 0.85rem; color: var(--secondary-color); margin-top: 1rem; text-align: center;">
-                Visualização do consumo agregado de janeiro a dezembro do ano atual (meses sem consumo aparecem com 0) (Total: <strong>{{ dados_graficos.consumo_total_ano|floatformat:0|formatar_litros }} L</strong>)
+                {% if dados_graficos.periodo_selecionado == 'personalizado' %}
+                Visualização do consumo agregado de janeiro a dezembro do ano de referência (inclui meses anteriores para comparação).
+                {% else %}
+                Visualização do consumo agregado de janeiro a dezembro do ano atual (meses sem consumo aparecem com 0).
+                {% endif %}
             </p>
         </div>
     </div>
@@ -124,14 +128,14 @@
     </div>
 
 
-    <!-- Gráfico 4: Top 10 lotes -->
+    <!-- Gráfico 4: Lotes acima do limite mensal -->
     <div class="chart-container" style="padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: white; margin-bottom: 3rem;">
         <h3 style="color: var(--dark-text); margin-bottom: 1.5rem; font-size: 1.2rem;">
-            Os 10 Lotes com maiores consumo
+            Lotes com consumo mensal acima de {{ dados_graficos.limite_mensal_litros|floatformat:0|formatar_litros }} L
         </h3>
         <canvas id="chartTopLotes"></canvas>
         <p style="font-size: 0.85rem; color: var(--secondary-color); margin-top: 1rem; text-align: center;">
-            Ranking dos 10 lotes com maior consumo no período selecionado (soma de todos os hidrômetros ativos)
+            Exibe lotes que ultrapassaram o limite mensal no período filtrado (valor mostrado = maior consumo mensal identificado por lote)
         </p>
     </div>
 
@@ -254,18 +258,18 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
 
-    // ============ GRÁFICO 4: TOP 10 LOTES POR CONSUMO NO ANO ============
+    // ============ GRÁFICO 4: LOTES ACIMA DO LIMITE MENSAL ============
     const ctxTopLotes = document.getElementById('chartTopLotes');
-    if (ctxTopLotes && dadosGraficos.top_lotes && dadosGraficos.top_lotes.length > 0) {
-        const labelsTop = dadosGraficos.top_lotes.map(item => `Lote ${item.lote}`);
-        const valoresTop = dadosGraficos.top_lotes.map(item => item.consumo_litros);
+    if (ctxTopLotes && dadosGraficos.lotes_acima_limite_mensal && dadosGraficos.lotes_acima_limite_mensal.length > 0) {
+        const labelsTop = dadosGraficos.lotes_acima_limite_mensal.map(item => `Lote ${item.lote} (${item.mes_nome})`);
+        const valoresTop = dadosGraficos.lotes_acima_limite_mensal.map(item => item.consumo_litros);
 
         new Chart(ctxTopLotes, {
             type: 'bar',
             data: {
                 labels: labelsTop,
                 datasets: [{
-                    label: 'Consumo no Ano (Litros)',
+                    label: `Maior consumo mensal acima de ${Number(dadosGraficos.limite_mensal_litros || 14000).toLocaleString('pt-BR')} L`,
                     data: valoresTop,
                     backgroundColor: 'rgba(8, 145, 178, 0.85)',
                     borderColor: '#0891b2',
@@ -312,7 +316,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         },
                         title: {
                             display: true,
-                            text: 'Litros no Ano'
+                            text: 'Litros no Mês'
                         }
                     },
                     y: {
