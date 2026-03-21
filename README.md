@@ -304,16 +304,22 @@ curl "http://localhost:8000/api/leituras/?data_inicio=2026-01-01&data_fim=2026-0
 
 ## 📲 WhatsApp Automático (dia 20)
 
-- Comando mensal automático: `python manage.py enviar_whatsapp_mensal`
-- Período enviado: do dia 1 até o dia da execução (ex.: dia 20 do mês)
+- Pré-geração (dia 15): `python manage.py pregerar_relatorios_mensais --data-coleta 2026-02-15`
+- Pasta gerada: `media/relatorios_mensais/2026-02-15/`
+- Para lotes sem dados no período, o sistema gera um PDF de fallback "sem dados" para manter o envio em arquivo.
+- Em produção (Render), a pré-geração do dia 15 roda via endpoint interno do serviço web (`/jobs/pregerar-relatorios/`) para garantir acesso ao disco com as fotos.
+- Envio automático no dia 20 (usa os PDFs já pré-gerados, somente PDF): `python manage.py enviar_whatsapp_mensal --enviar-pdf --sem-fallback-texto --obrigar-relatorios-pregerados`
+- Período padrão com cache: anual até a data da coleta (01/01 até dia 15 do mês)
 - Provedor usado: **Z-API** (`https://app.z-api.io/app`)
 - Formato de destino aceito: `+55...` ou `55...` (somente dígitos também funciona)
 - Simulação sem envio real: `python manage.py enviar_whatsapp_mensal --dry-run --data-referencia 2026-02-20`
-- Envio com PDF (com fallback para texto): `python manage.py enviar_whatsapp_mensal --enviar-pdf`
+- Envio com PDF sem usar cache (comportamento antigo): `python manage.py enviar_whatsapp_mensal --enviar-pdf --nao-usar-relatorios-pregerados`
 - Envio com PDF sem fallback: `python manage.py enviar_whatsapp_mensal --enviar-pdf --sem-fallback-texto`
 - Teste isolado com PDF: `python manage.py enviar_whatsapp_teste --enviar-pdf --to 55219SEUNUMERO --pdf-url https://SEU_DOMINIO/lotes/1/graficos/exportar/pdf/?periodo=ano_atual`
+- Se quiser exigir cache mesmo fora do dia 20: `python manage.py enviar_whatsapp_mensal --enviar-pdf --obrigar-relatorios-pregerados`
 - Agendamento em produção: serviço `cron` no [render.yaml](render.yaml) com schedule `0 11 20 * *` (08:00 no horário de Brasília)
 - Observação de fuso: o Render agenda em UTC; por isso `0 11 20 * *` equivale a 08:00 em Brasília.
+- Segurança do job interno: configure `JOB_SECRET_TOKEN` e envie no header `X-Job-Token`.
 - Variáveis obrigatórias no ambiente do cron: `DATABASE_URL`, `APP_BASE_URL`, `ZAPI_INSTANCE_ID`, `ZAPI_INSTANCE_TOKEN`, `ZAPI_CLIENT_TOKEN`
 - Variável opcional no ambiente do cron: `ZAPI_WHATSAPP_TO` (destino padrão)
 

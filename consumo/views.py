@@ -358,18 +358,27 @@ def pregerar_relatorios_job(request):
         return JsonResponse({'erro': 'Nao autorizado'}, status=401)
 
     data_coleta = request.GET.get('data_coleta') or request.POST.get('data_coleta')
-    lote_numero = request.GET.get('lote_numero') or request.POST.get('lote_numero')
     sobrescrever_raw = request.GET.get('sobrescrever') or request.POST.get('sobrescrever')
+    base_url = request.GET.get('base_url') or request.POST.get('base_url')
+    lote_numero = request.GET.get('lote_numero') or request.POST.get('lote_numero')
+    intervalo_segundos = request.GET.get('intervalo_segundos') or request.POST.get('intervalo_segundos')
+    tentativas = request.GET.get('tentativas') or request.POST.get('tentativas')
     sobrescrever = str(sobrescrever_raw).lower() in {'1', 'true', 'yes', 'sim'}
 
     output = io.StringIO()
     kwargs = {'stdout': output, 'stderr': output}
     if data_coleta:
         kwargs['data_coleta'] = data_coleta
-    if lote_numero:
-        kwargs['lote_numero'] = lote_numero
     if sobrescrever:
         kwargs['sobrescrever'] = True
+    if base_url:
+        kwargs['base_url'] = base_url
+    if lote_numero:
+        kwargs['lote_numero'] = lote_numero
+    if intervalo_segundos:
+        kwargs['intervalo_segundos'] = intervalo_segundos
+    if tentativas:
+        kwargs['tentativas'] = tentativas
 
     try:
         call_command('pregerar_relatorios_mensais', **kwargs)
@@ -2165,41 +2174,56 @@ def exportar_graficos_lote_pdf(request, lote_id):
     elements.append(Spacer(1, 0.3*inch))
 
     leituras_com_foto = [leitura for leitura in leituras_periodo if leitura.foto]
+    buffers_fotos_pdf = []
     if leituras_com_foto:
         elements.append(PageBreak())
         elements.append(Paragraph("📷 Fotos das Leituras", heading_style))
         for leitura in leituras_com_foto:
             try:
-                # Verificar se a foto existe e é acessível
                 if not leitura.foto:
                     continue
-                    
-                # Tentar obter o caminho absoluto da foto
-                foto_path = None
-                if hasattr(leitura.foto, 'path'):
-                    foto_path = leitura.foto.path
-                    # Garantir caminho absoluto
-                    if not os.path.isabs(foto_path):
-                        foto_path = os.path.join(settings.MEDIA_ROOT, foto_path)
-                elif hasattr(leitura.foto, 'file'):
-                    foto_file = leitura.foto.file.name
-                    if not os.path.isabs(foto_file):
-                        foto_path = os.path.join(settings.MEDIA_ROOT, foto_file)
+
+                foto_source = None
+
+                # Prioriza stream do storage (funciona com storage remoto e local).
+                try:
+                    leitura.foto.open('rb')
+                    conteudo = leitura.foto.read()
+                    if conteudo:
+                        foto_buffer = io.BytesIO(conteudo)
+                        buffers_fotos_pdf.append(foto_buffer)
+                        foto_source = foto_buffer
+                except Exception:
+                    foto_source = None
+                finally:
+                    try:
+                        leitura.foto.close()
+                    except Exception:
+                        pass
+
+                # Fallback para caminho de arquivo local quando disponível.
+                if foto_source is None:
+                    foto_path = None
+                    if hasattr(leitura.foto, 'path'):
+                        foto_path = leitura.foto.path
+                        if not os.path.isabs(foto_path):
+                            foto_path = os.path.join(settings.MEDIA_ROOT, foto_path)
+                    elif hasattr(leitura.foto, 'file'):
+                        foto_file = leitura.foto.file.name
+                        if not os.path.isabs(foto_file):
+                            foto_path = os.path.join(settings.MEDIA_ROOT, foto_file)
+                        else:
+                            foto_path = foto_file
+
+                    if foto_path and os.path.exists(foto_path):
+                        foto_source = foto_path
                     else:
-                        foto_path = foto_file
-                        
-                # Se não conseguiu o caminho ou arquivo não existe, pular
-                if not foto_path:
+                        alt_path = os.path.join(settings.MEDIA_ROOT, str(leitura.foto))
+                        if os.path.exists(alt_path):
+                            foto_source = alt_path
+
+                if foto_source is None:
                     continue
-                    
-                # Verificar se arquivo existe
-                if not os.path.exists(foto_path):
-                    # Tentar caminho alternativo
-                    alt_path = os.path.join(settings.MEDIA_ROOT, str(leitura.foto))
-                    if os.path.exists(alt_path):
-                        foto_path = alt_path
-                    else:
-                        continue
                     
                 legenda = (
                     f"Hidrômetro {leitura.hidrometro.numero} - "
@@ -2210,7 +2234,7 @@ def exportar_graficos_lote_pdf(request, lote_id):
                 
                 # Adicionar foto com tratamento de erro
                 try:
-                    img_foto = Image(foto_path, width=6.5*inch, height=3.8*inch)
+                    img_foto = Image(foto_source, width=6.5*inch, height=3.8*inch)
                     elements.append(img_foto)
                 except Exception as img_error:
                     # Se falhar ao carregar imagem, adicionar nota
@@ -2240,6 +2264,12 @@ def exportar_graficos_lote_pdf(request, lote_id):
         f'{data_fim.strftime("%Y%m%d")}.pdf"'
     )
     
+    for foto_buffer in buffers_fotos_pdf:
+        try:
+            foto_buffer.close()
+        except Exception:
+            pass
+
     return response
 
 
