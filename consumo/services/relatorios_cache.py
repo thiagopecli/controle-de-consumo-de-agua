@@ -7,12 +7,6 @@ from django.conf import settings
 
 
 def calcular_data_coleta(data_referencia):
-    """
-    Retorna a data de coleta de referência (dia 15).
-
-    - Se a data de referência for dia >= 15, usa dia 15 do mesmo mês.
-    - Se for dia < 15, usa dia 15 do mês anterior.
-    """
     if data_referencia.day >= 15:
         return data_referencia.replace(day=15)
 

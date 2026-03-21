@@ -1,17 +1,18 @@
 import json
 import os
+import time
 from datetime import datetime
 from io import BytesIO
 
-import requests
 from django.core.management.base import BaseCommand, CommandError
-from django.conf import settings
 from django.utils import timezone
+from django.db.models import Exists, OuterRef
 
+import requests
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-from consumo.models import Lote
+from consumo.models import Lote, Leitura
 from consumo.services.relatorios_cache import (
     calcular_data_coleta,
     caminho_pdf_lote,
@@ -37,6 +38,33 @@ class Command(BaseCommand):
             action="store_true",
             help="Sobrescreve PDFs ja existentes na pasta de destino.",
         )
+        parser.add_argument(
+            "--base-url",
+            default=None,
+            help="URL base da aplicacao para baixar os PDFs (ex: https://controle-de-consumo-de-agua.onrender.com)",
+        )
+        parser.add_argument(
+            "--lote-numero",
+            default=None,
+            help="Gera apenas um lote especifico (numero do lote, ex: 287).",
+        )
+        parser.add_argument(
+            "--permitir-base-local",
+            action="store_true",
+            help="Permite APP_BASE_URL local (localhost/127.0.0.1). Em producao, mantenha desativado.",
+        )
+        parser.add_argument(
+            "--intervalo-segundos",
+            type=float,
+            default=2.0,
+            help="Intervalo entre lotes para reduzir carga (padrao: 2s).",
+        )
+        parser.add_argument(
+            "--tentativas",
+            type=int,
+            default=3,
+            help="Quantidade de tentativas por lote em caso de falha temporaria (padrao: 3).",
+        )
 
     def handle(self, *args, **options):
         data_coleta = self._resolver_data_coleta(options.get("data_coleta"))
@@ -44,15 +72,25 @@ class Command(BaseCommand):
         pasta_saida = pasta_relatorios_coleta(data_coleta)
         pasta_saida.mkdir(parents=True, exist_ok=True)
 
-        lotes = Lote.objects.filter(ativo=True, tipo="residencial").order_by("numero")
+        lotes = Lote.objects.filter(ativo=True, tipo="residencial")
+        if options.get("lote_numero"):
+            lotes = lotes.filter(numero=str(options["lote_numero"]).strip())
+        lotes = lotes.order_by("numero")
         if not lotes.exists():
             raise CommandError(
                 "Nenhum lote residencial ativo encontrado para o periodo "
                 f"{data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}."
             )
 
+        base_url = self._obter_base_url(
+            options.get("base_url"),
+            permitir_local=options.get("permitir_base_local", False),
+        )
+        intervalo_segundos = max(0.0, float(options.get("intervalo_segundos") or 0.0))
+        tentativas = max(1, int(options.get("tentativas") or 1))
         gerados = 0
         ignorados = 0
+        ignorados_sem_registro_sem_whatsapp = 0
         fallback_sem_dados = 0
         erros = 0
 
@@ -62,14 +100,46 @@ class Command(BaseCommand):
             f"para {lotes.count()} lote(s) em {pasta_saida}"
         )
 
-        for lote in lotes:
+        leituras_periodo_subquery = Leitura.objects.filter(
+            hidrometro__lote_id=OuterRef('pk'),
+            data_leitura__date__gte=data_inicio,
+            data_leitura__date__lte=data_fim,
+        )
+        lotes = lotes.annotate(tem_leituras_periodo=Exists(leituras_periodo_subquery))
+
+        total_lotes = lotes.count()
+        for indice, lote in enumerate(lotes, start=1):
+            self.stdout.write(f"[{indice}/{total_lotes}] Lote {lote.numero}: iniciando")
+
+            tem_whatsapp = bool(
+                (getattr(lote, 'telefone_whatsapp', '') or '').strip()
+                or (getattr(lote, 'telefone_whatsapp_2', '') or '').strip()
+            )
+
+            if not lote.tem_leituras_periodo and not tem_whatsapp:
+                ignorados_sem_registro_sem_whatsapp += 1
+                continue
+
             caminho_pdf = caminho_pdf_lote(pasta_saida, lote.numero, data_inicio, data_fim)
             if caminho_pdf.exists() and not options["sobrescrever"]:
                 ignorados += 1
                 continue
 
+            # Protege contra cenários em que a pasta não exista por limpeza externa.
+            caminho_pdf.parent.mkdir(parents=True, exist_ok=True)
+
             try:
-                response_pdf = self._baixar_pdf_por_url(lote.id, data_inicio, data_fim)
+                url_pdf = (
+                    f"{base_url}/lotes/{lote.id}/graficos/exportar/pdf/"
+                    f"?periodo=personalizado&data_inicio={data_inicio.strftime('%Y-%m-%d')}"
+                    f"&data_fim={data_fim.strftime('%Y-%m-%d')}"
+                )
+
+                response_pdf = self._baixar_pdf_com_retry(
+                    url=url_pdf,
+                    tentativas=tentativas,
+                    timeout=180,
+                )
                 if response_pdf.status_code == 404:
                     self._gerar_pdf_fallback_sem_dados(
                         caminho_pdf,
@@ -99,7 +169,11 @@ class Command(BaseCommand):
                     self.style.WARNING(f"Lote {lote.numero}: erro ao gerar relatorio ({exc}).")
                 )
 
+            if indice < total_lotes and intervalo_segundos > 0:
+                time.sleep(intervalo_segundos)
+
         manifesto_path = pasta_saida / "manifesto.json"
+        manifesto_path.parent.mkdir(parents=True, exist_ok=True)
         manifesto = {
             "gerado_em": timezone.localtime(timezone.now()).isoformat(),
             "data_coleta": data_coleta.isoformat(),
@@ -108,6 +182,7 @@ class Command(BaseCommand):
             "quantidade_lotes": lotes.count(),
             "pdfs_gerados": gerados,
             "pdfs_ignorados_existentes": ignorados,
+            "pdfs_ignorados_sem_registro_sem_whatsapp": ignorados_sem_registro_sem_whatsapp,
             "pdfs_fallback_sem_dados": fallback_sem_dados,
             "pdfs_com_erro": erros,
         }
@@ -118,26 +193,14 @@ class Command(BaseCommand):
             self.style.SUCCESS(
                 "Concluido. "
                 f"Gerados: {gerados} | Fallback sem dados: {fallback_sem_dados} "
-                f"| Ignorados: {ignorados} | Erros: {erros} | Pasta: {pasta_saida}"
+                f"| Ignorados existentes: {ignorados} "
+                f"| Ignorados sem registro e sem WhatsApp: {ignorados_sem_registro_sem_whatsapp} "
+                f"| Erros: {erros} | Pasta: {pasta_saida}"
             )
         )
 
         if erros > 0:
             raise CommandError("Pre-geracao finalizada com erros. Verifique os avisos acima.")
-
-    def _baixar_pdf_por_url(self, lote_id, data_inicio, data_fim):
-        base_url = getattr(settings, "APP_BASE_URL", None)
-        if not base_url:
-            base_url = os.getenv("APP_BASE_URL", "http://127.0.0.1:8000")
-        base_url = base_url.rstrip("/")
-
-        url = (
-            f"{base_url}/lotes/{lote_id}/graficos/exportar/pdf/"
-            f"?periodo=personalizado&data_inicio={data_inicio.strftime('%Y-%m-%d')}"
-            f"&data_fim={data_fim.strftime('%Y-%m-%d')}"
-        )
-
-        return requests.get(url, timeout=120)
 
     def _gerar_pdf_fallback_sem_dados(self, caminho_pdf, lote_numero, data_inicio, data_fim):
         buffer = BytesIO()
@@ -176,3 +239,54 @@ class Command(BaseCommand):
             return data
 
         return calcular_data_coleta(timezone.localdate())
+
+    def _obter_base_url(self, base_url_override=None, permitir_local=False):
+        base_url = (base_url_override or "").strip().rstrip("/")
+        if not base_url:
+            base_url = os.getenv("APP_BASE_URL", "").strip().rstrip("/")
+        if not base_url:
+            raise CommandError(
+                "APP_BASE_URL nao configurada. Defina a URL base da aplicacao para baixar PDFs."
+            )
+
+        base_url_lower = base_url.lower()
+        if not permitir_local and ("localhost" in base_url_lower or "127.0.0.1" in base_url_lower):
+            raise CommandError(
+                "URL base local detectada. Use --base-url com dominio publico do Render "
+                "ou --permitir-base-local explicitamente."
+            )
+        return base_url
+
+    def _baixar_pdf_com_retry(self, url, tentativas, timeout):
+        ultima_resposta = None
+        ultimo_erro = None
+
+        for tentativa in range(1, tentativas + 1):
+            try:
+                resposta = requests.get(url, timeout=timeout)
+                ultima_resposta = resposta
+
+                # 404 e 400 sao erros de negocio; nao adianta repetir.
+                if resposta.status_code in {400, 404}:
+                    return resposta
+
+                # Sucesso.
+                if resposta.status_code == 200:
+                    return resposta
+
+                # Erros temporarios (429/5xx): tenta novamente.
+                if resposta.status_code in {429, 500, 502, 503, 504} and tentativa < tentativas:
+                    time.sleep(min(8, 1.5 * tentativa))
+                    continue
+
+                return resposta
+            except Exception as exc:  # noqa: BLE001
+                ultimo_erro = exc
+                if tentativa < tentativas:
+                    time.sleep(min(8, 1.5 * tentativa))
+                    continue
+
+        if ultima_resposta is not None:
+            return ultima_resposta
+
+        raise RuntimeError(f"Falha de rede ao baixar PDF: {ultimo_erro}")

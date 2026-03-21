@@ -46,10 +46,10 @@ services:
     name: controle-agua-pregerar-relatorios
     env: python
     plan: free
-    # Render usa UTC: 10:00 UTC = 07:00 no horário de Brasília
+    # Render usa UTC: 10:00 UTC = 07:00 no horario de Brasilia
     schedule: "0 10 15 * *"
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "python -c \"import os,requests; base=os.environ['APP_BASE_URL'].rstrip('/'); token=os.environ['JOB_SECRET_TOKEN']; url=f'{base}/jobs/pregerar-relatorios/?sobrescrever=1'; resp=requests.post(url, headers={'X-Job-Token': token}, timeout=1800); print(resp.status_code); print(resp.text); resp.raise_for_status()\""
+    startCommand: "python -c \"import os,requests; base=os.environ['APP_BASE_URL'].rstrip('/'); token=os.environ['JOB_SECRET_TOKEN']; url=f'{base}/jobs/pregerar-relatorios/?sobrescrever=1&intervalo_segundos=3&tentativas=3'; resp=requests.post(url, headers={'X-Job-Token': token}, timeout=1800); print(resp.status_code); print(resp.text); resp.raise_for_status()\""
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.2
@@ -61,8 +61,6 @@ services:
         fromDatabase:
           name: controle-agua-db
           property: connectionString
-      - key: MEDIA_ROOT
-        value: /var/data/media
       - key: APP_BASE_URL
         sync: false
       - key: JOB_SECRET_TOKEN

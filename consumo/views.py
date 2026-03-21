@@ -359,6 +359,10 @@ def pregerar_relatorios_job(request):
 
     data_coleta = request.GET.get('data_coleta') or request.POST.get('data_coleta')
     sobrescrever_raw = request.GET.get('sobrescrever') or request.POST.get('sobrescrever')
+    base_url = request.GET.get('base_url') or request.POST.get('base_url')
+    lote_numero = request.GET.get('lote_numero') or request.POST.get('lote_numero')
+    intervalo_segundos = request.GET.get('intervalo_segundos') or request.POST.get('intervalo_segundos')
+    tentativas = request.GET.get('tentativas') or request.POST.get('tentativas')
     sobrescrever = str(sobrescrever_raw).lower() in {'1', 'true', 'yes', 'sim'}
 
     output = io.StringIO()
@@ -367,6 +371,14 @@ def pregerar_relatorios_job(request):
         kwargs['data_coleta'] = data_coleta
     if sobrescrever:
         kwargs['sobrescrever'] = True
+    if base_url:
+        kwargs['base_url'] = base_url
+    if lote_numero:
+        kwargs['lote_numero'] = lote_numero
+    if intervalo_segundos:
+        kwargs['intervalo_segundos'] = intervalo_segundos
+    if tentativas:
+        kwargs['tentativas'] = tentativas
 
     try:
         call_command('pregerar_relatorios_mensais', **kwargs)
