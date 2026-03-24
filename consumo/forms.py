@@ -12,7 +12,7 @@ from .models import UsuarioPerfil
 class LoginForm(AuthenticationForm):
     username = forms.CharField(
         label='E-mail ou telefone',
-        widget=forms.TextInput(attrs={'autofocus': True, 'placeholder': 'seuemail@dominio.com ou 81999998888', 'class': 'form-control'})
+        widget=forms.TextInput(attrs={'autofocus': True, 'placeholder': 'E-Mail ou Telefone', 'class': 'form-control'})
     )
 
     password = forms.CharField(
