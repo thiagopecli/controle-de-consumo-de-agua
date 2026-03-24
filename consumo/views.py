@@ -1,9 +1,16 @@
-from django.shortcuts import render, get_object_or_404
+from functools import wraps
+
+from django.contrib import messages
+from django.contrib.auth import login, logout
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, get_object_or_404, redirect
 from django.utils import timezone
 from django.db.models import Sum, Avg, Max, Min, Count, Q, Case, When, Value, IntegerField
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, FileResponse, Http404
 from django.conf import settings
+from django.core.cache import cache
 from django.core.management import call_command
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
@@ -15,6 +22,7 @@ import os
 import hmac
 import zipfile
 import glob
+import mimetypes
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
@@ -23,6 +31,7 @@ from reportlab.lib.units import inch
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.utils import ImageReader
 
+from .forms import CadastroUsuarioForm, LoginForm
 from .models import Lote, Hidrometro, Leitura
 from .services.relatorios_cache import calcular_data_coleta, pasta_relatorios_coleta
 from .serializers import (
@@ -39,6 +48,33 @@ MESES_PT_BR = {
     5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
     9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
 }
+
+
+def usuario_eh_administracao(user):
+    if not user.is_authenticated:
+        return False
+    if user.is_staff or user.is_superuser:
+        return True
+
+    perfil = getattr(user, 'perfil', None)
+    return bool(perfil and perfil.tipo_acesso == 'administracao')
+
+
+def _redirecionar_pos_login(user):
+    if usuario_eh_administracao(user):
+        return redirect('consumo:dashboard')
+    return redirect('consumo:registrar_leitura')
+
+
+def admin_required(view_func):
+    @wraps(view_func)
+    @login_required
+    def _wrapped_view(request, *args, **kwargs):
+        if not usuario_eh_administracao(request.user):
+            return redirect('consumo:acesso_negado')
+        return view_func(request, *args, **kwargs)
+
+    return _wrapped_view
 
 
 def formatar_mes_ano_ptbr(data):
@@ -299,6 +335,7 @@ class LeituraViewSet(viewsets.ModelViewSet):
 
 
 # Views HTML para interface web
+@admin_required
 def dashboard(request):
     """Dashboard principal"""
     total_lotes = Lote.objects.filter(ativo=True).count()
@@ -339,6 +376,96 @@ def service_worker(request):
     )
     response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return response
+
+
+def login_view(request):
+    if request.user.is_authenticated:
+        return _redirecionar_pos_login(request.user)
+
+    max_tentativas = getattr(settings, 'LOGIN_MAX_ATTEMPTS', 5)
+    tempo_bloqueio = getattr(settings, 'LOGIN_LOCKOUT_SECONDS', 900)
+
+    identificador_raw = (request.POST.get('username') or '').strip() if request.method == 'POST' else ''
+    identificador_normalizado = identificador_raw.lower()
+    ip = (request.META.get('HTTP_X_FORWARDED_FOR') or request.META.get('REMOTE_ADDR') or 'desconhecido').split(',')[0].strip()
+
+    chave_falhas_ip = f'auth:falhas:ip:{ip}'
+    chave_bloqueio_ip = f'auth:bloqueio:ip:{ip}'
+    chave_falhas_identificador = f'auth:falhas:identificador:{ip}:{identificador_normalizado}' if identificador_normalizado else None
+    chave_bloqueio_identificador = f'auth:bloqueio:identificador:{ip}:{identificador_normalizado}' if identificador_normalizado else None
+
+    bloqueado = bool(cache.get(chave_bloqueio_ip))
+    if chave_bloqueio_identificador:
+        bloqueado = bloqueado or bool(cache.get(chave_bloqueio_identificador))
+
+    form = LoginForm(request=request, data=request.POST or None)
+    if request.method == 'POST' and bloqueado:
+        form.add_error(None, 'Muitas tentativas de login. Aguarde alguns minutos e tente novamente.')
+        return render(request, 'consumo/login.html', {'form': form, 'next': request.GET.get('next', '')})
+
+    if request.method == 'POST' and form.is_valid():
+        user = form.get_user()
+        login(request, user)
+
+        cache.delete(chave_falhas_ip)
+        cache.delete(chave_bloqueio_ip)
+        if chave_falhas_identificador:
+            cache.delete(chave_falhas_identificador)
+        if chave_bloqueio_identificador:
+            cache.delete(chave_bloqueio_identificador)
+
+        next_url = request.POST.get('next', '')
+        if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+            return redirect(next_url)
+
+        return _redirecionar_pos_login(user)
+
+    if request.method == 'POST' and not form.is_valid():
+        falhas_ip = cache.get(chave_falhas_ip, 0) + 1
+        cache.set(chave_falhas_ip, falhas_ip, timeout=tempo_bloqueio)
+
+        if falhas_ip >= max_tentativas:
+            cache.set(chave_bloqueio_ip, True, timeout=tempo_bloqueio)
+
+        if chave_falhas_identificador and chave_bloqueio_identificador:
+            falhas_identificador = cache.get(chave_falhas_identificador, 0) + 1
+            cache.set(chave_falhas_identificador, falhas_identificador, timeout=tempo_bloqueio)
+            if falhas_identificador >= max_tentativas:
+                cache.set(chave_bloqueio_identificador, True, timeout=tempo_bloqueio)
+
+    context = {
+        'form': form,
+        'next': request.GET.get('next', ''),
+    }
+    return render(request, 'consumo/login.html', context)
+
+
+def logout_view(request):
+    logout(request)
+    return redirect('consumo:login')
+
+
+def cadastro_usuario(request):
+    if request.user.is_authenticated:
+        return _redirecionar_pos_login(request.user)
+
+    form = CadastroUsuarioForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Cadastro enviado com sucesso. Aguarde aprovacao do superusuario para acessar o sistema.')
+        return redirect('consumo:login')
+
+    return render(request, 'consumo/cadastro_usuario.html', {'form': form})
+
+
+@login_required
+def acesso_negado(request):
+    return render(request, 'consumo/acesso_negado.html', status=403)
+
+
+@login_required
+def inicio(request):
+    return _redirecionar_pos_login(request.user)
 
 
 @csrf_exempt
@@ -402,6 +529,7 @@ def pregerar_relatorios_job(request):
     )
 
 
+@admin_required
 def listar_hidrometros(request):
     """Lista todos os hidrômetros com paginação"""
     from django.core.paginator import Paginator
@@ -460,6 +588,7 @@ def listar_hidrometros(request):
     return render(request, 'consumo/listar_hidrometros.html', context)
 
 
+@login_required
 def listar_leituras(request):
     """Lista todas as leituras com paginação"""
     from django.core.paginator import Paginator
@@ -485,6 +614,14 @@ def listar_leituras(request):
     page_number = request.GET.get('page', 1)
     leituras = paginator.get_page(page_number)
     total_leituras = paginator.count
+
+    for leitura in leituras:
+        leitura.foto_disponivel = False
+        if leitura.foto and leitura.foto.name:
+            try:
+                leitura.foto_disponivel = leitura.foto.storage.exists(leitura.foto.name)
+            except Exception:
+                leitura.foto_disponivel = False
     
     context = {
         'leituras': leituras,
@@ -495,6 +632,38 @@ def listar_leituras(request):
     return render(request, 'consumo/listar_leituras.html', context)
 
 
+@login_required
+def visualizar_foto_leitura(request, leitura_id):
+    leitura = get_object_or_404(Leitura, id=leitura_id)
+    if not leitura.foto:
+        raise Http404('Leitura sem foto anexada.')
+
+    if not leitura.foto.name or not leitura.foto.storage.exists(leitura.foto.name):
+        return HttpResponse(
+            'Foto indisponivel: o arquivo nao foi encontrado no armazenamento local.',
+            status=404,
+            content_type='text/plain; charset=utf-8'
+        )
+
+    nome_arquivo = leitura.foto.name.split('/')[-1]
+    tipo_conteudo, _ = mimetypes.guess_type(nome_arquivo)
+    tipo_conteudo = tipo_conteudo or 'application/octet-stream'
+
+    try:
+        leitura.foto.open('rb')
+    except FileNotFoundError:
+        return HttpResponse(
+            'Foto indisponivel: o arquivo foi removido ou nao existe neste ambiente.',
+            status=404,
+            content_type='text/plain; charset=utf-8'
+        )
+
+    response = FileResponse(leitura.foto, content_type=tipo_conteudo)
+    response['Content-Disposition'] = f'inline; filename="{nome_arquivo}"'
+    return response
+
+
+@login_required
 def registrar_leitura(request):
     """Formulário para registrar leituras"""
     hidrometros_queryset = Hidrometro.objects.filter(ativo=True).select_related('lote')
@@ -511,14 +680,17 @@ def registrar_leitura(request):
         return (tipo_prioridade, chave_natural(hidrometro.lote.numero), chave_natural(hidrometro.numero))
 
     hidrometros = sorted(hidrometros_queryset, key=chave_ordenacao_hidrometro)
+    nome_responsavel = (request.user.get_full_name() or '').strip() or request.user.username
     
     context = {
         'hidrometros': hidrometros,
+        'nome_responsavel': nome_responsavel,
     }
     
     return render(request, 'consumo/registrar_leitura.html', context)
 
 
+@admin_required
 def detalhes_hidrometro(request, hidrometro_id):
     """Página com detalhes e histórico de leituras do hidrômetro com filtros e gráficos"""
     from datetime import timedelta
@@ -667,6 +839,7 @@ def detalhes_hidrometro(request, hidrometro_id):
     return render(request, 'consumo/detalhes_hidrometro.html', context)
 
 
+@admin_required
 def graficos_consumo(request):
     """Página com gráficos de consumo do condomínio com filtro de período."""
 
@@ -898,6 +1071,7 @@ def graficos_consumo(request):
     return render(request, 'consumo/graficos_consumo.html', context)
 
 
+@admin_required
 def graficos_lote(request, lote_id):
     """Página com gráficos de consumo específicos de um lote com filtros de período"""
     from collections import defaultdict
@@ -1049,6 +1223,7 @@ def graficos_lote(request, lote_id):
     return render(request, 'consumo/graficos_lote.html', context)
 
 
+@admin_required
 def exportar_graficos_consumo_pdf(request):
     """Exporta os gráficos de consumo do condomínio em PDF"""
     LIMITE_MENSAL_LITROS = 14000
@@ -1396,6 +1571,7 @@ def exportar_graficos_consumo_pdf(request):
     return response
 
 
+@admin_required
 def baixar_relatorios_lotes_periodo_zip(request):
     """Gera e baixa relatórios individuais de lotes em um único ZIP.
     
@@ -1588,6 +1764,7 @@ def baixar_relatorios_lotes_periodo_zip(request):
     return response
 
 
+@admin_required
 def exportar_graficos_lote_pdf(request, lote_id):
     """Exporta os gráficos de consumo de um lote específico em PDF"""
     import os

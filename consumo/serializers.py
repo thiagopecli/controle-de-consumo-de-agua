@@ -52,8 +52,14 @@ class LeituraCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Leitura
         fields = ['hidrometro', 'leitura', 'data_leitura', 'periodo', 'responsavel', 'observacoes', 'foto']
+        extra_kwargs = {
+            'foto': {'required': True, 'allow_null': False}
+        }
     
     def validate(self, data):
+        if not data.get('foto'):
+            raise serializers.ValidationError('A foto da leitura é obrigatória.')
+
         # Validar se a leitura não é menor que a última leitura
         hidrometro = data.get('hidrometro')
         leitura_atual = data.get('leitura')

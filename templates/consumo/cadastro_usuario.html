@@ -1,0 +1,77 @@
+{% extends 'consumo/base.html' %}
+
+{% block title %}Criar Conta - Sistema de Controle de Agua{% endblock %}
+
+{% block content %}
+<div class="registrar-leitura-page" style="max-width: 700px; margin: 0 auto;">
+    <h2>Criar conta de acesso</h2>
+    <p>Informe e-mail, nome, sobrenome, telefone e uma senha de 4 a 8 caracteres.</p>
+    <p>Depois do cadastro, o superusuario precisa aprovar seu acesso na tela de admin.</p>
+
+    <div class="form-container">
+        <form method="post">
+            {% csrf_token %}
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="id_email">E-mail</label>
+                    {{ form.email }}
+                    {% if form.email.errors %}
+                        <div class="alert danger" style="display:block; margin-top:0.5rem;">{{ form.email.errors|join:', ' }}</div>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="id_telefone_contato">Telefone para contato</label>
+                    {{ form.telefone_contato }}
+                    {% if form.telefone_contato.errors %}
+                        <div class="alert danger" style="display:block; margin-top:0.5rem;">{{ form.telefone_contato.errors|join:', ' }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="id_first_name">Nome</label>
+                    {{ form.first_name }}
+                    {% if form.first_name.errors %}
+                        <div class="alert danger" style="display:block; margin-top:0.5rem;">{{ form.first_name.errors|join:', ' }}</div>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="id_last_name">Sobrenome</label>
+                    {{ form.last_name }}
+                    {% if form.last_name.errors %}
+                        <div class="alert danger" style="display:block; margin-top:0.5rem;">{{ form.last_name.errors|join:', ' }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="id_password1">Senha</label>
+                    {{ form.password1 }}
+                    {% if form.password1.errors %}
+                        <div class="alert danger" style="display:block; margin-top:0.5rem;">{{ form.password1.errors|join:', ' }}</div>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="id_password2">Confirmar senha</label>
+                    {{ form.password2 }}
+                    {% if form.password2.errors %}
+                        <div class="alert danger" style="display:block; margin-top:0.5rem;">{{ form.password2.errors|join:', ' }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if form.non_field_errors %}
+                <div class="alert danger" style="display:block; margin-bottom:1rem;">{{ form.non_field_errors|join:', ' }}</div>
+            {% endif %}
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary btn-lg">Criar conta</button>
+                <a href="{% url 'consumo:login' %}" class="btn btn-secondary btn-lg">Voltar ao login</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

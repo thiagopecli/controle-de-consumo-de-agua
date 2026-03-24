@@ -1,0 +1,16 @@
+{% extends 'consumo/base.html' %}
+
+{% block title %}Acesso Negado - Sistema de Controle de Agua{% endblock %}
+
+{% block content %}
+<div class="registrar-leitura-page" style="max-width: 700px; margin: 0 auto; text-align: center;">
+    <h2>Acesso negado</h2>
+    <p>Seu perfil nao possui permissao para acessar esta tela.</p>
+    <p>Usuarios comuns podem acessar apenas registro de leitura e historico de registros.</p>
+
+    <div class="form-actions" style="justify-content: center;">
+        <a href="{% url 'consumo:registrar_leitura' %}" class="btn btn-primary btn-lg">Registrar leitura</a>
+        <a href="{% url 'consumo:listar_leituras' %}" class="btn btn-secondary btn-lg">Historico</a>
+    </div>
+</div>
+{% endblock %}

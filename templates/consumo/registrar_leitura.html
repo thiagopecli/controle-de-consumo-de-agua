@@ -41,7 +41,7 @@
                 <div class="form-group">
                     <label for="responsavel">Responsável</label>
                     <input type="text" id="responsavel" name="responsavel" 
-                           class="form-control" placeholder="Nome do responsável">
+                           class="form-control" placeholder="Nome do responsável" value="{{ nome_responsavel }}" readonly>
                 </div>
             </div>
             
@@ -52,8 +52,8 @@
             </div>
             
             <div class="form-group">
-                <label for="foto">Foto da Leitura</label>
-                <input type="file" id="foto" name="foto" class="form-control" accept="image/*">
+                <label for="foto">Foto da Leitura *</label>
+                <input type="file" id="foto" name="foto" class="form-control" accept="image/*" required>
             </div>
             
             <div class="form-actions">
@@ -88,7 +88,7 @@
         <ul>
             <li>Preencha todos os campos obrigatórios marcados com *</li>
             <li>A leitura deve ser em metros cúbicos (m³)</li>
-            <li>A foto é opcional mas recomendada para registro</li>
+            <li>A foto é obrigatória para concluir o registro</li>
             <li>Sem internet, a leitura fica salva no aparelho e é enviada automaticamente quando voltar o sinal</li>
         </ul>
     </div>
@@ -98,6 +98,7 @@
 const OFFLINE_DB_NAME = 'controle_agua_offline';
 const OFFLINE_DB_VERSION = 1;
 const OFFLINE_STORE = 'leituras_pendentes';
+const RESPONSAVEL_PADRAO = '{{ nome_responsavel|escapejs }}';
 let sincronizacaoEmAndamento = false;
 
 function getCookie(name) {
@@ -338,11 +339,13 @@ async function montarPayloadFormulario() {
     };
 
     const foto = document.getElementById('foto').files[0];
-    if (foto) {
-        payload.foto_nome = foto.name;
-        payload.foto_tipo = foto.type || 'image/jpeg';
-        payload.foto_data_url = await converterArquivoParaDataUrl(foto);
+    if (!foto) {
+        throw new Error('Anexe uma foto da leitura antes de salvar.');
     }
+
+    payload.foto_nome = foto.name;
+    payload.foto_tipo = foto.type || 'image/jpeg';
+    payload.foto_data_url = await converterArquivoParaDataUrl(foto);
 
     return payload;
 }
@@ -468,6 +471,9 @@ function resetarFormularioLeitura() {
     const dataLeituraInput = document.getElementById('data_leitura');
     dataLeituraInput.value = dataHoraAtualLocal();
     definirPeriodoPorHorario(dataLeituraInput.value);
+
+    const responsavelInput = document.getElementById('responsavel');
+    responsavelInput.value = RESPONSAVEL_PADRAO;
 }
 
 function configurarFormatacaoCampoLeitura() {
@@ -515,6 +521,11 @@ document.addEventListener('DOMContentLoaded', function() {
     dataLeituraInput.addEventListener('change', function() {
         definirPeriodoPorHorario(this.value);
     });
+
+    const responsavelInput = document.getElementById('responsavel');
+    if (responsavelInput && !responsavelInput.value) {
+        responsavelInput.value = RESPONSAVEL_PADRAO;
+    }
 
     configurarFormatacaoCampoLeitura();
     atualizarStatusConexao();
