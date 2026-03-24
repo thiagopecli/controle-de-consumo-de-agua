@@ -63,10 +63,12 @@
                     </td>
                     <td>{{ leitura.responsavel|default:"N/A" }}</td>
                     <td>
-                        {% if leitura.foto %}
-                        <a href="{{ leitura.foto.url }}" target="_blank" class="btn btn-sm btn-info">
+                        {% if leitura.foto_disponivel %}
+                        <a href="{% url 'consumo:visualizar_foto_leitura' leitura.id %}" target="_blank" class="btn btn-sm btn-info">
                             📷 Ver Foto
                         </a>
+                        {% elif leitura.foto %}
+                        <span style="color: #b45309;">Arquivo indisponível</span>
                         {% else %}
                         <span style="color: #94a3b8;">Sem foto</span>
                         {% endif %}

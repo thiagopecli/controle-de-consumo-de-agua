@@ -3,7 +3,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 import re
 
-from .models import Lote, Hidrometro, Leitura
+from .models import Lote, Hidrometro, Leitura, UsuarioPerfil
 
 
 class LoteForm(forms.ModelForm):
@@ -93,4 +93,39 @@ class LeituraAdmin(admin.ModelAdmin):
     ordering = ['-data_leitura']
     date_hierarchy = 'data_leitura'
     readonly_fields = ['criado_em', 'atualizado_em']
+
+
+@admin.register(UsuarioPerfil)
+class UsuarioPerfilAdmin(admin.ModelAdmin):
+    list_display = ['user', 'situacao_acesso', 'tipo_acesso', 'telefone_contato', 'criado_em']
+    list_filter = ['situacao_acesso', 'tipo_acesso']
+    search_fields = ['user__username', 'user__email', 'user__first_name', 'user__last_name', 'telefone_contato']
+    actions = ['aprovar_usuarios', 'recusar_usuarios']
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    @admin.action(description='Aprovar usuarios selecionados')
+    def aprovar_usuarios(self, request, queryset):
+        queryset = queryset.exclude(user__is_superuser=True)
+        atualizados = queryset.update(situacao_acesso='aprovado')
+        self.message_user(request, f'{atualizados} usuario(s) aprovado(s) com sucesso.')
+
+    @admin.action(description='Recusar usuarios selecionados')
+    def recusar_usuarios(self, request, queryset):
+        queryset = queryset.exclude(user__is_superuser=True)
+        atualizados = queryset.update(situacao_acesso='recusado')
+        self.message_user(request, f'{atualizados} usuario(s) recusado(s).')
 

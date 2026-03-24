@@ -1,0 +1,41 @@
+{% extends 'consumo/base.html' %}
+
+{% block title %}Entrar - Sistema de Controle de Agua{% endblock %}
+
+{% block content %}
+<div class="registrar-leitura-page" style="max-width: 560px; margin: 0 auto;">
+    <h2>Entrar no sistema</h2>
+
+    <div class="form-container">
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next }}">
+
+            <div class="form-group">
+                <label for="id_username">E-mail ou telefone</label>
+                {{ form.username }}
+                {% if form.username.errors %}
+                    <div class="alert danger" style="display:block; margin-top:0.5rem;">{{ form.username.errors|join:', ' }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_password">Senha</label>
+                {{ form.password }}
+                {% if form.password.errors %}
+                    <div class="alert danger" style="display:block; margin-top:0.5rem;">{{ form.password.errors|join:', ' }}</div>
+                {% endif %}
+            </div>
+
+            {% if form.non_field_errors %}
+                <div class="alert danger" style="display:block; margin-bottom:1rem;">{{ form.non_field_errors|join:', ' }}</div>
+            {% endif %}
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary btn-lg">Entrar</button>
+                <a href="{% url 'consumo:cadastro_usuario' %}" class="btn btn-secondary btn-lg">Criar conta</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

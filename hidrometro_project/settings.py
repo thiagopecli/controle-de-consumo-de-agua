@@ -138,16 +138,16 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {
+            'min_length': 4,
+        }
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        'NAME': 'consumo.validators.MaximumLengthValidator',
+        'OPTIONS': {
+            'max_length': 8,
+        }
     },
 ]
 
@@ -218,3 +218,10 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 100,
     'DEFAULT_RENDERER_CLASSES': _renderers,
 }
+
+LOGIN_URL = 'consumo:login'
+LOGIN_REDIRECT_URL = 'consumo:inicio'
+LOGOUT_REDIRECT_URL = 'consumo:login'
+
+LOGIN_MAX_ATTEMPTS = int(os.getenv('LOGIN_MAX_ATTEMPTS', '5'))
+LOGIN_LOCKOUT_SECONDS = int(os.getenv('LOGIN_LOCKOUT_SECONDS', '900'))

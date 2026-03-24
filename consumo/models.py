@@ -1,5 +1,9 @@
 from django.db import models
+from django.db.models import Q
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.contrib.auth.models import User
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from datetime import timedelta
 
 
@@ -220,4 +224,78 @@ class Leitura(models.Model):
         """Calcula o consumo desde a última leitura em litros"""
         consumo_m3 = self.consumo_desde_ultima_leitura()
         return float(consumo_m3) * 1000
+
+
+class UsuarioPerfil(models.Model):
+    """Perfil complementar para controle de acesso e contato."""
+
+    TIPO_ACESSO_CHOICES = [
+        ('comum', 'Usuario Comum'),
+        ('administracao', 'Administracao'),
+    ]
+    SITUACAO_ACESSO_CHOICES = [
+        ('pendente', 'Pendente de Aprovacao'),
+        ('aprovado', 'Aprovado'),
+        ('recusado', 'Recusado'),
+    ]
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='perfil',
+        verbose_name='Usuario'
+    )
+    telefone_contato = models.CharField(
+        max_length=20,
+        verbose_name='Telefone para Contato'
+    )
+    tipo_acesso = models.CharField(
+        max_length=20,
+        choices=TIPO_ACESSO_CHOICES,
+        default='comum',
+        verbose_name='Tipo de Acesso'
+    )
+    situacao_acesso = models.CharField(
+        max_length=20,
+        choices=SITUACAO_ACESSO_CHOICES,
+        default='pendente',
+        verbose_name='Situacao do Acesso'
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Perfil de Usuario'
+        verbose_name_plural = 'Perfis de Usuario'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['telefone_contato'],
+                condition=~Q(telefone_contato=''),
+                name='uniq_telefone_contato_nao_vazio',
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user.get_full_name() or self.user.username} ({self.get_tipo_acesso_display()})"
+
+    @property
+    def eh_administracao(self):
+        return self.tipo_acesso == 'administracao' or self.user.is_staff or self.user.is_superuser
+
+
+@receiver(post_save, sender=User)
+def criar_perfil_usuario(sender, instance, created, **kwargs):
+    if not created:
+        return
+
+    tipo_inicial = 'administracao' if (instance.is_staff or instance.is_superuser) else 'comum'
+    situacao_inicial = 'aprovado' if (instance.is_staff or instance.is_superuser) else 'pendente'
+    UsuarioPerfil.objects.get_or_create(
+        user=instance,
+        defaults={
+            'telefone_contato': '',
+            'tipo_acesso': tipo_inicial,
+            'situacao_acesso': situacao_inicial,
+        },
+    )
 

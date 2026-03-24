@@ -88,7 +88,7 @@ canvas {
 }
 
 .nav-brand h1 {
-    font-size: 1.5rem;
+    font-size: 1.2rem;
     font-weight: 700;
     text-shadow: 0 2px 4px rgba(0,0,0,0.2);
     display: flex;
@@ -951,7 +951,7 @@ canvas {
     }
     
     .nav-brand h1 {
-        font-size: 1rem;
+        font-size: 0.8rem;
     }
 
     .page-header {
@@ -1093,7 +1093,7 @@ canvas {
 
 @media (max-width: 480px) {
     .nav-brand h1 {
-        font-size: 0.9rem;
+        font-size: 0.72rem;
     }
     
     .nav-link {

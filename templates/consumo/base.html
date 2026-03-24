@@ -40,18 +40,36 @@
                 <li class="nav-close-item">
                     <button class="nav-close" type="button" aria-label="Fechar menu">X</button>
                 </li>
-                <li><a href="{% url 'consumo:dashboard' %}" class="nav-link">Home</a></li>
-                <li><a href="{% url 'consumo:listar_hidrometros' %}" class="nav-link">Hidrômetros</a></li>
-                <li><a href="{% url 'consumo:listar_leituras' %}" class="nav-link">Leituras</a></li>
-                <li><a href="{% url 'consumo:registrar_leitura' %}" class="nav-link">Registrar Leitura</a></li>
-                <li><a href="{% url 'consumo:graficos_consumo' %}" class="nav-link">Gráficos Geral</a></li>
-                <li><a href="/admin/" class="nav-link">Admin</a></li>
+                {% if user.is_authenticated %}
+                    {% if is_admin_user %}
+                        <li><a href="{% url 'consumo:dashboard' %}" class="nav-link">Home</a></li>
+                        <li><a href="{% url 'consumo:listar_hidrometros' %}" class="nav-link">Hidrômetros</a></li>
+                        <li><a href="{% url 'consumo:listar_leituras' %}" class="nav-link">Leituras</a></li>
+                        <li><a href="{% url 'consumo:registrar_leitura' %}" class="nav-link">Registrar Leitura</a></li>
+                        <li><a href="{% url 'consumo:graficos_consumo' %}" class="nav-link">Gráficos Geral</a></li>
+                        <li><a href="/admin/" class="nav-link">Admin</a></li>
+                    {% else %}
+                        <li><a href="{% url 'consumo:registrar_leitura' %}" class="nav-link">Registrar Leitura</a></li>
+                        <li><a href="{% url 'consumo:listar_leituras' %}" class="nav-link">Histórico de Registros</a></li>
+                    {% endif %}
+                    <li><a href="{% url 'consumo:logout' %}" class="nav-link">Sair</a></li>
+                {% else %}
+                    <li><a href="{% url 'consumo:login' %}" class="nav-link">Entrar</a></li>
+                    <li><a href="{% url 'consumo:cadastro_usuario' %}" class="nav-link">Criar Conta</a></li>
+                {% endif %}
             </ul>
         </div>
     </nav>
 
     <main class="main-content">
         <div class="container">
+            {% if messages %}
+                <div class="messages" style="margin-bottom: 1rem;">
+                    {% for message in messages %}
+                        <div class="card" style="padding: 0.75rem 1rem; margin-bottom: 0.5rem;">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
             {% block content %}{% endblock %}
         </div>
     </main>
