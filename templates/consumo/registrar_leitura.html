@@ -273,7 +273,26 @@ function extrairTextoErroApi(data, fallback) {
     if (data.error) {
         return data.error;
     }
+    if (data.mensagem) {
+        return data.mensagem;
+    }
+    if (Array.isArray(data.non_field_errors) && data.non_field_errors.length > 0) {
+        return String(data.non_field_errors[0]);
+    }
+    if (Array.isArray(data.leitura) && data.leitura.length > 0) {
+        return String(data.leitura[0]);
+    }
     return JSON.stringify(data);
+}
+
+function erroIndicaLeituraRegressiva(data, erroTexto) {
+    const codigo = String((data && data.codigo) || '').toUpperCase();
+    if (codigo === 'LEITURA_REGRESSIVA') {
+        return true;
+    }
+
+    const texto = String(erroTexto || '').toLowerCase();
+    return texto.includes('menor que a última leitura') || texto.includes('menor que a ultima leitura');
 }
 
 function erroIndicaLeituraDuplicada(erroTexto) {
@@ -385,10 +404,31 @@ async function enviarLeituraParaApi(payload) {
 
     if (!response.ok) {
         const erro = extrairTextoErroApi(data, 'Falha ao registrar leitura.');
-        return { ok: false, status: response.status, erro };
+        return { ok: false, status: response.status, erro, data };
     }
 
     return { ok: true, data };
+}
+
+function obterDescricaoRegistro(payload) {
+    const selectHidrometro = document.getElementById('hidrometro');
+    const optionSelecionada = selectHidrometro
+        ? Array.from(selectHidrometro.options).find((option) => option.value === String(payload.hidrometro))
+        : null;
+
+    const identificacaoHidrometro = optionSelecionada
+        ? optionSelecionada.textContent.trim()
+        : `ID ${payload.hidrometro}`;
+
+    let dataHora = payload.data_leitura || '';
+    if (dataHora) {
+        const data = new Date(dataHora);
+        if (!Number.isNaN(data.getTime())) {
+            dataHora = data.toLocaleString('pt-BR');
+        }
+    }
+
+    return `${identificacaoHidrometro} | leitura ${payload.leitura} m³${dataHora ? ` | ${dataHora}` : ''}`;
 }
 
 async function salvarLeituraOffline(payload) {
@@ -423,6 +463,7 @@ async function sincronizarPendencias() {
 
         let enviadas = 0;
         let duplicadasIgnoradas = 0;
+        const recusadasRegressivas = [];
 
         for (const item of pendentes) {
             const resultado = await enviarLeituraParaApi(item.payload);
@@ -436,6 +477,12 @@ async function sincronizarPendencias() {
             if (resultado.status >= 400 && resultado.status < 500 && erroIndicaLeituraDuplicada(resultado.erro)) {
                 await removerLeituraPendente(item.id);
                 duplicadasIgnoradas += 1;
+                continue;
+            }
+
+            if (resultado.status >= 400 && resultado.status < 500 && erroIndicaLeituraRegressiva(resultado.data, resultado.erro)) {
+                await removerLeituraPendente(item.id);
+                recusadasRegressivas.push(obterDescricaoRegistro(item.payload));
                 continue;
             }
 
@@ -455,6 +502,18 @@ async function sincronizarPendencias() {
 
         if (duplicadasIgnoradas > 0) {
             exibirMensagem('alert-warning', `ℹ️ ${duplicadasIgnoradas} leitura(s) pendente(s) já existiam no servidor e foram removidas da fila local.`, 9000);
+        }
+
+        if (recusadasRegressivas.length > 0) {
+            const limite = 3;
+            const detalhes = recusadasRegressivas.slice(0, limite).join(' ; ');
+            const excedente = recusadasRegressivas.length - limite;
+            const sufixo = excedente > 0 ? ` ; e mais ${excedente} registro(s).` : '';
+            exibirMensagem(
+                'alert-warning',
+                `⚠️ Registro(s) recusado(s) por leitura menor que a anterior e descartado(s) da fila: ${detalhes}${sufixo}`,
+                14000
+            );
         }
     } catch (error) {
         // Falhas de rede/IndexedDB são silenciosas para evitar ruído quando não há internet.
@@ -577,6 +636,15 @@ document.getElementById('leituraForm').addEventListener('submit', async function
             }
 
             if (resultado.status >= 400 && resultado.status < 500) {
+                if (erroIndicaLeituraRegressiva(resultado.data, resultado.erro)) {
+                    const registroRecusado = obterDescricaoRegistro(payload);
+                    exibirMensagem(
+                        'alert-warning',
+                        `⚠️ Registro recusado por leitura menor que a anterior: ${registroRecusado}.`,
+                        12000
+                    );
+                    return;
+                }
                 exibirMensagem('alert-error', `❌ Erro ao registrar leitura: ${resultado.erro}`);
                 return;
             }
