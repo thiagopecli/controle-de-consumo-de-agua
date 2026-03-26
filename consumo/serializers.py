@@ -48,6 +48,7 @@ class LeituraSerializer(serializers.ModelSerializer):
 
 class LeituraCreateSerializer(serializers.ModelSerializer):
     """Serializer otimizado para criação de leituras"""
+    CODIGO_LEITURA_REGRESSIVA = 'LEITURA_REGRESSIVA'
     
     class Meta:
         model = Leitura
@@ -69,8 +70,10 @@ class LeituraCreateSerializer(serializers.ModelSerializer):
         ).order_by('-data_leitura').first()
         
         if ultima_leitura and leitura_atual < ultima_leitura.leitura:
-            raise serializers.ValidationError(
-                f"A leitura não pode ser menor que a última leitura registrada ({ultima_leitura.leitura}m³)"
-            )
+            raise serializers.ValidationError({
+                'codigo': self.CODIGO_LEITURA_REGRESSIVA,
+                'mensagem': f"A leitura não pode ser menor que a última leitura registrada ({ultima_leitura.leitura}m³)",
+                'ultima_leitura': str(ultima_leitura.leitura),
+            })
         
         return data
