@@ -12,6 +12,8 @@ app_name = 'consumo'
 urlpatterns = [
     # API endpoints
     path('api/', include(router.urls)),
+    path('webhooks/zapi/disconnected/', views.webhook_zapi_desconectado, name='webhook_zapi_desconectado'),
+    path('webhooks/zapi/connected/', views.webhook_zapi_conectado, name='webhook_zapi_conectado'),
     path('service-worker.js', views.service_worker, name='service_worker'),
     path('offline/', views.offline_page, name='offline_page'),
 
