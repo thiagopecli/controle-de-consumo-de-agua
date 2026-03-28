@@ -1,13 +1,38 @@
 import json
+import logging
 import os
 import re
+import time
 from pathlib import Path
 
 import requests
 
 
+LOGGER = logging.getLogger(__name__)
+
+
 class ConfiguracaoWhatsAppInvalida(Exception):
     pass
+
+
+class FalhaConexaoWhatsApp(RuntimeError):
+    pass
+
+
+def _env_bool(nome, padrao=False):
+    valor = os.getenv(nome)
+    if valor is None:
+        return padrao
+    return str(valor).strip().lower() in {"1", "true", "yes", "sim", "on"}
+
+
+def _env_int(nome, padrao):
+    bruto = str(os.getenv(nome, str(padrao))).strip()
+    try:
+        valor = int(bruto)
+    except (TypeError, ValueError):
+        valor = padrao
+    return max(0, valor)
 
 
 def _formatar_litros(valor):
@@ -79,6 +104,208 @@ def _obter_configuracao_zapi():
         "instance_token": instance_token,
         "client_token": client_token,
         "to_whatsapp_padrao": to_whatsapp_padrao,
+        "auto_recover_on_send": _env_bool("ZAPI_AUTO_RECOVER_ON_SEND", True),
+        "reconnect_attempts": max(1, _env_int("ZAPI_RECONNECT_ATTEMPTS", 2)),
+        "reconnect_wait_seconds": _env_int("ZAPI_RECONNECT_WAIT_SECONDS", 3),
+    }
+
+
+def _zapi_url(config, path):
+    return (
+        "https://api.z-api.io/instances/"
+        f"{config['instance_id']}/token/{config['instance_token']}/{path.lstrip('/')}"
+    )
+
+
+def _zapi_request(config, method, path, payload=None, timeout=30):
+    headers = {
+        "Client-Token": config["client_token"],
+        "Content-Type": "application/json",
+    }
+
+    request_kwargs = {
+        "url": _zapi_url(config, path),
+        "headers": headers,
+        "timeout": timeout,
+    }
+
+    if payload is not None:
+        request_kwargs["data"] = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+    try:
+        response = requests.request(method=method.upper(), **request_kwargs)
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Falha de comunicação com Z-API: {exc}") from exc
+
+    try:
+        data = response.json()
+    except Exception:
+        data = {}
+
+    return response, data
+
+
+def _mensagem_erro_zapi(response, data):
+    if isinstance(data, dict):
+        msg = data.get("message") or data.get("error")
+        if msg:
+            return str(msg)
+    return response.text or "erro nao detalhado"
+
+
+def _erro_indica_desconexao(message):
+    texto = (message or "").strip().lower()
+    if not texto:
+        return False
+
+    termos = [
+        "not connected",
+        "restore the session",
+        "disconnected",
+        "device has been disconnected",
+        "you need to restore the session",
+        "nao conectado",
+        "desconectado",
+    ]
+    return any(termo in texto for termo in termos)
+
+
+def _obter_status_instancia_config(config):
+    response, data = _zapi_request(config, "GET", "status", timeout=20)
+    if not response.ok:
+        mensagem = _mensagem_erro_zapi(response, data)
+        raise RuntimeError(
+            f"Falha ao consultar status da instancia Z-API (HTTP {response.status_code}): {mensagem}"
+        )
+
+    return {
+        "connected": bool(data.get("connected")),
+        "smartphoneConnected": bool(data.get("smartphoneConnected")),
+        "error": str(data.get("error") or "").strip(),
+        "raw": data,
+    }
+
+
+def obter_status_instancia_whatsapp():
+    config = _obter_configuracao_zapi()
+    return _obter_status_instancia_config(config)
+
+
+def _restaurar_sessao_config(config):
+    response, data = _zapi_request(config, "GET", "restore-session", timeout=30)
+    return bool(response.ok and (data.get("value") is True or not data))
+
+
+def _reiniciar_instancia_config(config):
+    response, data = _zapi_request(config, "GET", "restart", timeout=30)
+    return bool(response.ok and (data.get("value") is True or not data))
+
+
+def garantir_conexao_whatsapp(tentativas=None, aguardar_segundos=None):
+    """
+    Tenta manter/reestabelecer a conexao sem exigir novo QRCode.
+    Fluxo: status -> restore-session -> status -> restart -> status.
+    """
+    config = _obter_configuracao_zapi()
+    total_tentativas = tentativas if tentativas is not None else config["reconnect_attempts"]
+    total_tentativas = max(1, int(total_tentativas))
+    espera = config["reconnect_wait_seconds"] if aguardar_segundos is None else max(0, int(aguardar_segundos))
+
+    passos = []
+
+    for tentativa in range(1, total_tentativas + 1):
+        status_inicial = _obter_status_instancia_config(config)
+        passos.append({
+            "tentativa": tentativa,
+            "etapa": "status_inicial",
+            "connected": status_inicial["connected"],
+            "smartphoneConnected": status_inicial["smartphoneConnected"],
+            "error": status_inicial["error"],
+        })
+
+        if status_inicial["connected"]:
+            return {
+                "ok": True,
+                "acao": "ja_conectado",
+                "status": status_inicial,
+                "passos": passos,
+            }
+
+        restaurado = _restaurar_sessao_config(config)
+        passos.append({"tentativa": tentativa, "etapa": "restore_session", "ok": restaurado})
+        if espera:
+            time.sleep(espera)
+
+        status_pos_restore = _obter_status_instancia_config(config)
+        passos.append({
+            "tentativa": tentativa,
+            "etapa": "status_pos_restore",
+            "connected": status_pos_restore["connected"],
+            "smartphoneConnected": status_pos_restore["smartphoneConnected"],
+            "error": status_pos_restore["error"],
+        })
+
+        if status_pos_restore["connected"]:
+            return {
+                "ok": True,
+                "acao": "restaurado",
+                "status": status_pos_restore,
+                "passos": passos,
+            }
+
+        reiniciado = _reiniciar_instancia_config(config)
+        passos.append({"tentativa": tentativa, "etapa": "restart", "ok": reiniciado})
+        if espera:
+            time.sleep(espera)
+
+        status_pos_restart = _obter_status_instancia_config(config)
+        passos.append({
+            "tentativa": tentativa,
+            "etapa": "status_pos_restart",
+            "connected": status_pos_restart["connected"],
+            "smartphoneConnected": status_pos_restart["smartphoneConnected"],
+            "error": status_pos_restart["error"],
+        })
+
+        if status_pos_restart["connected"]:
+            return {
+                "ok": True,
+                "acao": "reiniciado",
+                "status": status_pos_restart,
+                "passos": passos,
+            }
+
+    ultimo_status = passos[-1] if passos else {}
+    return {
+        "ok": False,
+        "acao": "falha_reconexao",
+        "status": ultimo_status,
+        "passos": passos,
+    }
+
+
+def garantir_conexao_whatsapp_ou_erro():
+    resultado = garantir_conexao_whatsapp()
+    if not resultado.get("ok"):
+        raise FalhaConexaoWhatsApp(
+            "Nao foi possivel reestabelecer a conexao WhatsApp pela Z-API sem nova leitura de QRCode."
+        )
+    return resultado
+
+
+def processar_webhook_desconexao_whatsapp(payload=None):
+    """
+    Entrada principal para webhook de desconexao da Z-API.
+    """
+    resultado = garantir_conexao_whatsapp()
+    if resultado.get("ok"):
+        LOGGER.warning("Reconexao automatica da Z-API concluida apos webhook de desconexao.")
+    else:
+        LOGGER.error("Falha na reconexao automatica da Z-API apos webhook de desconexao.")
+    return {
+        "ok": bool(resultado.get("ok")),
+        "reconexao": resultado,
+        "evento": payload or {},
     }
 
 
@@ -91,6 +318,10 @@ def enviar_resumo_consumo_whatsapp(
     to_whatsapp=None,
 ):
     config = _obter_configuracao_zapi()
+
+    if config["auto_recover_on_send"]:
+        garantir_conexao_whatsapp_ou_erro()
+
     destino = normalizar_numero_whatsapp(to_whatsapp or config["to_whatsapp_padrao"])
 
     if not destino:
@@ -106,40 +337,24 @@ def enviar_resumo_consumo_whatsapp(
         url_relatorio=url_relatorio,
     )
 
-    endpoint = (
-        "https://api.z-api.io/instances/"
-        f"{config['instance_id']}/token/{config['instance_token']}/send-text"
-    )
     payload = {
         "phone": destino,
         "message": mensagem,
     }
-    headers = {
-        "Client-Token": config["client_token"],
-        "Content-Type": "application/json",
-    }
-
-    response = requests.post(
-        endpoint,
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers=headers,
-        timeout=30,
-    )
+    response, data = _zapi_request(config, "POST", "send-text", payload=payload, timeout=30)
 
     if not response.ok:
-        try:
-            erro = response.json()
-            mensagem_erro = erro.get("message") or erro.get("error") or response.text
-        except Exception:
-            mensagem_erro = response.text
+        mensagem_erro = _mensagem_erro_zapi(response, data)
+        if config["auto_recover_on_send"] and _erro_indica_desconexao(mensagem_erro):
+            LOGGER.warning("Falha de envio por desconexao; tentando reconectar e reenviar texto.")
+            garantir_conexao_whatsapp_ou_erro()
+            response, data = _zapi_request(config, "POST", "send-text", payload=payload, timeout=30)
+
+    if not response.ok:
+        mensagem_erro = _mensagem_erro_zapi(response, data)
         raise RuntimeError(
             f"Falha ao enviar mensagem para a Z-API (HTTP {response.status_code}): {mensagem_erro}"
         )
-
-    try:
-        data = response.json()
-    except Exception:
-        data = {}
 
     return {
         "sid": data.get("zaapId") or data.get("messageId") or data.get("id"),
@@ -164,6 +379,10 @@ def enviar_relatorio_pdf_whatsapp(
     Se falhar e fallback_texto=True, envia resumo em texto com link.
     """
     config = _obter_configuracao_zapi()
+
+    if config["auto_recover_on_send"]:
+        garantir_conexao_whatsapp_ou_erro()
+
     destino = normalizar_numero_whatsapp(to_whatsapp or config["to_whatsapp_padrao"])
 
     if not destino:
@@ -171,10 +390,6 @@ def enviar_relatorio_pdf_whatsapp(
             "Defina ZAPI_WHATSAPP_TO no .env ou informe o destino no envio."
         )
 
-    endpoint = (
-        "https://api.z-api.io/instances/"
-        f"{config['instance_id']}/token/{config['instance_token']}/send-document/pdf"
-    )
     nome_arquivo = (
         f"relatorio_lote_{lote}_{str(data_inicio).replace('/', '-')}_{str(data_fim).replace('/', '-')}.pdf"
     )
@@ -200,24 +415,16 @@ def enviar_relatorio_pdf_whatsapp(
             url_relatorio=url_relatorio,
         ),
     }
-    headers = {
-        "Client-Token": config["client_token"],
-        "Content-Type": "application/json",
-    }
+    response, data = _zapi_request(config, "POST", "send-document/pdf", payload=payload, timeout=30)
 
-    response = requests.post(
-        endpoint,
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers=headers,
-        timeout=30,
-    )
+    if not response.ok:
+        mensagem_erro = _mensagem_erro_zapi(response, data)
+        if config["auto_recover_on_send"] and _erro_indica_desconexao(mensagem_erro):
+            LOGGER.warning("Falha de envio de PDF por desconexao; tentando reconectar e reenviar.")
+            garantir_conexao_whatsapp_ou_erro()
+            response, data = _zapi_request(config, "POST", "send-document/pdf", payload=payload, timeout=30)
 
     if response.ok:
-        try:
-            data = response.json()
-        except Exception:
-            data = {}
-
         if data.get("error"):
             raise RuntimeError(
                 f"Falha ao enviar PDF para a Z-API: {data.get('message') or data.get('error')}"
@@ -234,11 +441,7 @@ def enviar_relatorio_pdf_whatsapp(
             "tipo": "pdf",
         }
 
-    try:
-        erro = response.json()
-        mensagem_erro = erro.get("message") or erro.get("error") or response.text
-    except Exception:
-        mensagem_erro = response.text
+    mensagem_erro = _mensagem_erro_zapi(response, data)
 
     if not fallback_texto:
         raise RuntimeError(
