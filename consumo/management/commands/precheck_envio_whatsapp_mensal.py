@@ -1,10 +1,10 @@
 from datetime import datetime
-import os
 
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from consumo.models import Lote
+from consumo.services.env_guard import env_status_line, missing_required_env
 from consumo.services.relatorios_cache import (
     calcular_data_coleta,
     caminho_pdf_lote,
@@ -53,7 +53,15 @@ class Command(BaseCommand):
             f"periodo={data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}"
         )
 
-        faltantes_env = self._validar_variaveis_criticas()
+        required_env = [
+            "APP_BASE_URL",
+            "ZAPI_INSTANCE_ID",
+            "ZAPI_INSTANCE_TOKEN",
+            "ZAPI_CLIENT_TOKEN",
+        ]
+        self.stdout.write(f"Env check | {env_status_line(required_env)}")
+
+        faltantes_env = missing_required_env(required_env)
         if faltantes_env:
             self.stdout.write(
                 self.style.ERROR(
@@ -161,19 +169,6 @@ class Command(BaseCommand):
             return datetime.strptime(valor, "%Y-%m-%d").date()
         except ValueError as exc:
             raise CommandError("--data-referencia deve estar no formato YYYY-MM-DD") from exc
-
-    def _validar_variaveis_criticas(self):
-        obrigatorias = [
-            "APP_BASE_URL",
-            "ZAPI_INSTANCE_ID",
-            "ZAPI_INSTANCE_TOKEN",
-            "ZAPI_CLIENT_TOKEN",
-        ]
-        faltantes = []
-        for chave in obrigatorias:
-            if not str(os.getenv(chave, "")).strip():
-                faltantes.append(chave)
-        return faltantes
 
     def _destinos_lote(self, lote):
         candidatos = [

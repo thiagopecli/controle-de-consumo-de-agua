@@ -7,6 +7,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from consumo.models import Leitura, Lote
+from consumo.services.env_guard import ensure_required_env, env_status_line
 from consumo.services.relatorios_cache import (
     calcular_data_coleta,
     caminho_pdf_lote,
@@ -42,6 +43,17 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        required_env = ["APP_BASE_URL"]
+        if not options.get("dry_run"):
+            required_env.extend(["ZAPI_INSTANCE_ID", "ZAPI_INSTANCE_TOKEN", "ZAPI_CLIENT_TOKEN"])
+
+        try:
+            ensure_required_env(required_env, context="enviar_whatsapp_mensal")
+        except RuntimeError as exc:
+            raise CommandError(str(exc)) from exc
+
+        self.stdout.write(f"Env check | {env_status_line(required_env)}")
+
         data_referencia = self._resolver_data_referencia(options.get("data_referencia"))
         usar_relatorios_pregerados = not options["nao_usar_relatorios_pregerados"]
         intervalo_segundos = max(0.0, float(options.get("intervalo_segundos") or 0.0))
