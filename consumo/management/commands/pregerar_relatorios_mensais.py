@@ -13,6 +13,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 from consumo.models import Lote, Leitura
+from consumo.services.env_guard import ensure_required_env, env_status_line
 from consumo.services.relatorios_cache import (
     calcular_data_coleta,
     caminho_pdf_lote,
@@ -67,6 +68,17 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        required_env = []
+        if not (options.get("base_url") or "").strip():
+            required_env = ["APP_BASE_URL"]
+
+        if required_env:
+            try:
+                ensure_required_env(required_env, context="pregerar_relatorios_mensais")
+            except RuntimeError as exc:
+                raise CommandError(str(exc)) from exc
+            self.stdout.write(f"Env check | {env_status_line(required_env)}")
+
         data_coleta = self._resolver_data_coleta(options.get("data_coleta"))
         data_inicio, data_fim = intervalo_mensal_da_coleta(data_coleta)
         pasta_saida = pasta_relatorios_coleta(data_coleta)

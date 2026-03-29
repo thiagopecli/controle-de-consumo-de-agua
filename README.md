@@ -26,6 +26,20 @@ Sistema completo para gerenciamento e monitoramento de consumo de água através
 - PostgreSQL 12 ou superior
 - Git
 
+## 🔐 Ambientes (Local x Produção)
+
+- O arquivo `.env` local nao deve ser versionado.
+- Use `.env.example` como modelo base para desenvolvimento local.
+- Em producao (Render), configure variaveis no painel do servico/cron e nao no repositorio.
+- Nao reutilize segredos de producao no ambiente local.
+
+### Variaveis criticas em producao (Render)
+
+- Web: `DATABASE_URL`, `APP_BASE_URL`, `JOB_SECRET_TOKEN`
+- Cron pregeracao (dia 15): `DATABASE_URL`, `APP_BASE_URL`, `JOB_SECRET_TOKEN`
+- Cron precheck (dia 19): `DATABASE_URL`, `APP_BASE_URL`, `ZAPI_INSTANCE_ID`, `ZAPI_INSTANCE_TOKEN`, `ZAPI_CLIENT_TOKEN`
+- Cron envio (dia 20): `DATABASE_URL`, `APP_BASE_URL`, `ZAPI_INSTANCE_ID`, `ZAPI_INSTANCE_TOKEN`, `ZAPI_CLIENT_TOKEN`
+
 ### Passo a Passo
 
 1. **Clone ou acesse o repositório:**

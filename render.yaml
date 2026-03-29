@@ -135,3 +135,23 @@ services:
         sync: false
       - key: ZAPI_CLIENT_TOKEN
         sync: false
+
+  - type: cron
+    name: controle-agua-auditoria-whatsapp-lotes
+    env: python
+    plan: free
+    # Render usa UTC: 11:00 UTC = 08:00 no horario de Brasilia
+    schedule: "0 11 18 * *"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python manage.py auditar_whatsapp_lotes"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.2
+      - key: SECRET_KEY
+        sync: false
+      - key: DEBUG
+        value: "False"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: controle-agua-db
+          property: connectionString
