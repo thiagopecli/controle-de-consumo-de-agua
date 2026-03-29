@@ -85,7 +85,7 @@ services:
     # Render usa UTC: 11:00 UTC = 08:00 no horário de Brasília
     schedule: "0 11 20 * *"
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "python manage.py enviar_whatsapp_mensal --enviar-pdf --sem-fallback-texto --obrigar-relatorios-pregerados --intervalo-segundos 5"
+    startCommand: "python manage.py enviar_whatsapp_mensal --enviar-pdf --intervalo-segundos 5"
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.2
@@ -106,4 +106,32 @@ services:
       - key: ZAPI_CLIENT_TOKEN
         sync: false
       - key: ZAPI_WHATSAPP_TO
+        sync: false
+
+  - type: cron
+    name: controle-agua-precheck-whatsapp-mensal
+    env: python
+    plan: free
+    # Render usa UTC: 11:00 UTC = 08:00 no horario de Brasilia
+    schedule: "0 11 19 * *"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python manage.py precheck_envio_whatsapp_mensal --modo-estrito"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.2
+      - key: SECRET_KEY
+        sync: false
+      - key: DEBUG
+        value: "False"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: controle-agua-db
+          property: connectionString
+      - key: APP_BASE_URL
+        sync: false
+      - key: ZAPI_INSTANCE_ID
+        sync: false
+      - key: ZAPI_INSTANCE_TOKEN
+        sync: false
+      - key: ZAPI_CLIENT_TOKEN
         sync: false
