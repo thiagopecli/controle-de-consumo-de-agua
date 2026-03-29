@@ -53,7 +53,7 @@ class Command(BaseCommand):
             options["enviar_pdf"] = True
 
         pasta_cache = None
-        cache_obrigatorio = options["obrigar_relatorios_pregerados"] or data_referencia.day >= 20
+        cache_obrigatorio = options["obrigar_relatorios_pregerados"]
         if usar_relatorios_pregerados:
             if options["pasta_relatorios"]:
                 pasta_cache = Path(options["pasta_relatorios"]).expanduser().resolve()
