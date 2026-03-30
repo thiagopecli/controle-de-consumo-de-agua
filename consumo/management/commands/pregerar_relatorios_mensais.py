@@ -66,6 +66,11 @@ class Command(BaseCommand):
             default=3,
             help="Quantidade de tentativas por lote em caso de falha temporaria (padrao: 3).",
         )
+        parser.add_argument(
+            "--permitir-lotes-incompletos",
+            action="store_true",
+            help="Ignora validacao de lotes incompletos. Use apenas para testes/emergencias.",
+        )
 
     def handle(self, *args, **options):
         required_env = []
@@ -118,6 +123,33 @@ class Command(BaseCommand):
             data_leitura__date__lte=data_fim,
         )
         lotes = lotes.annotate(tem_leituras_periodo=Exists(leituras_periodo_subquery))
+
+        # ✅ NOVO: Validar se todos os lotes têm registros antes de gerar
+        total_lotes = lotes.count()
+        lotes_com_dados = lotes.filter(tem_leituras_periodo=True).count()
+        
+        permitir_incompletos = options.get("permitir_lotes_incompletos", False)
+        
+        if lotes_com_dados < total_lotes and not permitir_incompletos:
+            lotes_sem_dados = total_lotes - lotes_com_dados
+            self.stdout.write(
+                self.style.WARNING(
+                    f"⏳ AGUARDANDO COLETAS: {lotes_sem_dados}/{total_lotes} lote(s) ainda sem registro "
+                    f"({data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}). "
+                    f"Geração será retomada amanhã cuando todos tiverem dados. "
+                    f"Use --permitir-lotes-incompletos para ignorar esta validacao (nao recomendado)."
+                )
+            )
+            return
+
+        if lotes_com_dados < total_lotes and permitir_incompletos:
+            lotes_sem_dados = total_lotes - lotes_com_dados
+            self.stdout.write(
+                self.style.WARNING(
+                    f"⚠️  IGNORING {lotes_sem_dados}/{total_lotes} lote(s) incompleto(s). "
+                    f"Continuando com --permitir-lotes-incompletos."
+                )
+            )
 
         total_lotes = lotes.count()
         for indice, lote in enumerate(lotes, start=1):

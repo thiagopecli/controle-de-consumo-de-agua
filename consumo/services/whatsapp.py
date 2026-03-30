@@ -48,10 +48,11 @@ def _montar_mensagem_resumo_consumo(lote, data_inicio, data_fim, consumo_litros,
     return (
         f"Olá! 💧 Segue o resumo mensal de consumo de água do Lote {lote}.\n\n"
         f"📅 Período: {data_inicio} a {data_fim}\n"
-        f"📊 Consumo no Período: {consumo_formatado} litros\n\n"
+        f"📊 Consumo no Período: {consumo_formatado} litros\n"
+        f"Limite Mensal: 15.000 litros, valores excedentes sujeitos a cobrança.\n\n"
         "⚠️ Esta é uma mensagem automática. Em caso de dúvidas, por favor, entre em contato diretamente com a administração.\n\n"
         "Atenciosamente,\n"
-        "Condomínio Pedra de Inoã"
+        "Condomínio Residencial Pedra de Inoã"
     )
 
 
