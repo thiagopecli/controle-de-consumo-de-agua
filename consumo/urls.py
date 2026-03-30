@@ -34,6 +34,7 @@ urlpatterns = [
     path('registrar-leitura/', views.registrar_leitura, name='registrar_leitura'),
     path('graficos/', views.graficos_consumo, name='graficos_consumo'),
     path('jobs/pregerar-relatorios/', views.pregerar_relatorios_job, name='pregerar_relatorios_job'),
+    path('jobs/lotes/<int:lote_id>/graficos/exportar/pdf/', views.exportar_graficos_lote_pdf_job, name='exportar_graficos_lote_pdf_job'),
     
     # Exportação de relatórios
     path('graficos/exportar/pdf/', views.exportar_graficos_consumo_pdf, name='exportar_graficos_consumo_pdf'),

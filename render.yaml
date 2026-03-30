@@ -58,8 +58,8 @@ services:
     name: controle-agua-pregerar-relatorios
     env: python
     plan: free
-    # Render usa UTC: 10:00 UTC = 07:00 no horario de Brasilia
-    schedule: "0 10 15 * *"
+    # Render usa UTC: 00:00 UTC = 21:00 do dia anterior no horario de Brasilia
+    schedule: "0 0 * * *"
     buildCommand: "pip install -r requirements.txt"
     startCommand: "python -c \"import os,requests; base=os.environ['APP_BASE_URL'].rstrip('/'); token=os.environ['JOB_SECRET_TOKEN']; url=f'{base}/jobs/pregerar-relatorios/?sobrescrever=1&intervalo_segundos=3&tentativas=3'; resp=requests.post(url, headers={'X-Job-Token': token}, timeout=1800); print(resp.status_code); print(resp.text); resp.raise_for_status()\""
     envVars:

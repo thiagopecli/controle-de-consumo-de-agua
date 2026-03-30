@@ -404,6 +404,68 @@ def enviar_relatorio_pdf_whatsapp(
                 encoded_b64 = base64.b64encode(pdf_file.read()).decode("ascii")
             document_ref = f"data:application/pdf;base64,{encoded_b64}"
 
+    # Se o documento for URL, valida previamente para evitar envio de HTML/login como "PDF".
+    if isinstance(document_ref, str) and document_ref.lower().startswith(("http://", "https://")):
+        try:
+            response_validacao = requests.get(
+                document_ref,
+                timeout=30,
+                allow_redirects=False,
+                stream=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            if not fallback_texto:
+                raise RuntimeError(f"Falha ao validar URL do PDF antes do envio: {exc}") from exc
+
+            resultado_texto = enviar_resumo_consumo_whatsapp(
+                lote=lote,
+                data_inicio=data_inicio,
+                data_fim=data_fim,
+                consumo_litros=consumo_litros,
+                url_relatorio=url_relatorio,
+                to_whatsapp=destino,
+            )
+            resultado_texto["tipo"] = "texto_fallback"
+            resultado_texto["erro_pdf"] = f"Falha ao validar URL do PDF: {exc}"
+            return resultado_texto
+
+        try:
+            content_type = (response_validacao.headers.get("Content-Type") or "").lower()
+            assinatura = response_validacao.raw.read(4, decode_content=True)
+
+            if response_validacao.status_code != 200:
+                raise RuntimeError(
+                    f"URL do PDF retornou status {response_validacao.status_code}."
+                )
+
+            if "application/pdf" not in content_type:
+                raise RuntimeError(
+                    f"URL do PDF retornou Content-Type invalido: {content_type or '-'}"
+                )
+
+            if not assinatura.startswith(b"%PDF"):
+                raise RuntimeError("Conteudo da URL nao possui assinatura de PDF valida.")
+        except Exception as exc:  # noqa: BLE001
+            if not fallback_texto:
+                raise RuntimeError(f"URL de PDF invalida para envio: {exc}") from exc
+
+            resultado_texto = enviar_resumo_consumo_whatsapp(
+                lote=lote,
+                data_inicio=data_inicio,
+                data_fim=data_fim,
+                consumo_litros=consumo_litros,
+                url_relatorio=url_relatorio,
+                to_whatsapp=destino,
+            )
+            resultado_texto["tipo"] = "texto_fallback"
+            resultado_texto["erro_pdf"] = str(exc)
+            return resultado_texto
+        finally:
+            try:
+                response_validacao.close()
+            except Exception:
+                pass
+
     payload = {
         "phone": destino,
         "document": document_ref,
