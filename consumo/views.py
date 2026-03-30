@@ -908,7 +908,7 @@ def detalhes_hidrometro(request, hidrometro_id):
 def graficos_consumo(request):
     """Página com gráficos de consumo do condomínio com filtro de período."""
 
-    LIMITE_MENSAL_LITROS = 14000
+    LIMITE_MENSAL_LITROS = 15000
 
     agora = timezone.localtime(timezone.now())
     ultima_coleta = Leitura.objects.filter(
@@ -1291,7 +1291,7 @@ def graficos_lote(request, lote_id):
 @admin_required
 def exportar_graficos_consumo_pdf(request):
     """Exporta os gráficos de consumo do condomínio em PDF"""
-    LIMITE_MENSAL_LITROS = 14000
+    LIMITE_MENSAL_LITROS = 15000
 
     import os
     os.environ.setdefault('MPLCONFIGDIR', '/tmp/matplotlib')
