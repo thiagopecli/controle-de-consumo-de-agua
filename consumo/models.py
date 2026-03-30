@@ -127,8 +127,11 @@ class Hidrometro(models.Model):
     def consumo_diario_atual(self):
         """Retorna o consumo do dia atual em m³"""
         from django.utils import timezone
-        inicio_dia = timezone.localtime(timezone.now()).replace(hour=0, minute=0, second=0, microsecond=0)
+        # Usa a data atual em UTC
+        agora = timezone.now()
+        inicio_dia = agora.replace(hour=0, minute=0, second=0, microsecond=0)
         fim_dia = inicio_dia + timedelta(days=1)
+        
         leituras_hoje = self.leituras.filter(
             data_leitura__gte=inicio_dia,
             data_leitura__lt=fim_dia,
