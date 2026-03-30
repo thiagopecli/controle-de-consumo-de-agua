@@ -2293,4 +2293,25 @@ def exportar_graficos_lote_pdf(request, lote_id):
     return response
 
 
+@csrf_exempt
+def exportar_graficos_lote_pdf_job(request, lote_id):
+    """
+    Endpoint interno para gerar PDF por lote sem sessao web.
+    Autenticado por X-Job-Token (mesmo padrao dos jobs internos).
+    """
+    if request.method != 'GET':
+        return JsonResponse({'erro': 'Metodo nao permitido'}, status=405)
+
+    token_configurado = os.getenv('JOB_SECRET_TOKEN', '').strip()
+    token_recebido = (request.headers.get('X-Job-Token') or '').strip()
+
+    if not token_configurado:
+        return JsonResponse({'erro': 'Servico indisponivel: JOB_SECRET_TOKEN nao configurado'}, status=503)
+
+    if not token_recebido or not hmac.compare_digest(token_recebido, token_configurado):
+        return JsonResponse({'erro': 'Nao autorizado'}, status=401)
+
+    return exportar_graficos_lote_pdf.__wrapped__(request, lote_id)
+
+
 

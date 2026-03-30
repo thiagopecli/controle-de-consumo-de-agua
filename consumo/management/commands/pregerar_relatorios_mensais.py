@@ -73,9 +73,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        required_env = []
+        required_env = ["JOB_SECRET_TOKEN"]
         if not (options.get("base_url") or "").strip():
-            required_env = ["APP_BASE_URL"]
+            required_env.append("APP_BASE_URL")
 
         if required_env:
             try:
@@ -103,6 +103,11 @@ class Command(BaseCommand):
             options.get("base_url"),
             permitir_local=options.get("permitir_base_local", False),
         )
+        job_token = os.getenv("JOB_SECRET_TOKEN", "").strip()
+        if not job_token:
+            raise CommandError("JOB_SECRET_TOKEN nao configurado. Nao e possivel autenticar a geracao interna de PDFs.")
+
+        headers_job = {"X-Job-Token": job_token}
         intervalo_segundos = max(0.0, float(options.get("intervalo_segundos") or 0.0))
         tentativas = max(1, int(options.get("tentativas") or 1))
         gerados = 0
@@ -160,7 +165,7 @@ class Command(BaseCommand):
                 or (getattr(lote, 'telefone_whatsapp_2', '') or '').strip()
             )
 
-            if not lote.tem_leituras_periodo and not tem_whatsapp:
+            if not getattr(lote, "tem_leituras_periodo", False) and not tem_whatsapp:
                 ignorados_sem_registro_sem_whatsapp += 1
                 continue
 
@@ -174,7 +179,7 @@ class Command(BaseCommand):
 
             try:
                 url_pdf = (
-                    f"{base_url}/lotes/{lote.id}/graficos/exportar/pdf/"
+                    f"{base_url}/jobs/lotes/{lote.pk}/graficos/exportar/pdf/"
                     f"?periodo=personalizado&data_inicio={data_inicio.strftime('%Y-%m-%d')}"
                     f"&data_fim={data_fim.strftime('%Y-%m-%d')}"
                 )
@@ -183,6 +188,7 @@ class Command(BaseCommand):
                     url=url_pdf,
                     tentativas=tentativas,
                     timeout=180,
+                    headers=headers_job,
                 )
                 if response_pdf.status_code == 404:
                     self._gerar_pdf_fallback_sem_dados(
@@ -200,6 +206,16 @@ class Command(BaseCommand):
                     self.stdout.write(
                         self.style.WARNING(
                             f"Lote {lote.numero}: retorno {response_pdf.status_code}, nao foi gerado."
+                        )
+                    )
+                    continue
+
+                if not self._resposta_eh_pdf_valida(response_pdf):
+                    erros += 1
+                    content_type = (response_pdf.headers.get("Content-Type") or "").strip()
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"Lote {lote.numero}: resposta invalida para PDF (Content-Type={content_type or '-'})."
                         )
                     )
                     continue
@@ -301,13 +317,18 @@ class Command(BaseCommand):
             )
         return base_url
 
-    def _baixar_pdf_com_retry(self, url, tentativas, timeout):
+    def _baixar_pdf_com_retry(self, url, tentativas, timeout, headers=None):
         ultima_resposta = None
         ultimo_erro = None
 
         for tentativa in range(1, tentativas + 1):
             try:
-                resposta = requests.get(url, timeout=timeout)
+                resposta = requests.get(
+                    url,
+                    timeout=timeout,
+                    headers=headers,
+                    allow_redirects=False,
+                )
                 ultima_resposta = resposta
 
                 # 404 e 400 sao erros de negocio; nao adianta repetir.
@@ -334,3 +355,9 @@ class Command(BaseCommand):
             return ultima_resposta
 
         raise RuntimeError(f"Falha de rede ao baixar PDF: {ultimo_erro}")
+
+    def _resposta_eh_pdf_valida(self, resposta):
+        content_type = (resposta.headers.get("Content-Type") or "").lower()
+        inicio = resposta.content[:4] if resposta.content else b""
+
+        return ("application/pdf" in content_type) and inicio.startswith(b"%PDF")
