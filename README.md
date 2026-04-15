@@ -337,6 +337,9 @@ curl "http://localhost:8000/api/leituras/?data_inicio=2026-01-01&data_fim=2026-0
 - Segurança do job interno: configure `JOB_SECRET_TOKEN` e envie no header `X-Job-Token`.
 - Variáveis obrigatórias no ambiente do cron: `DATABASE_URL`, `APP_BASE_URL`, `ZAPI_INSTANCE_ID`, `ZAPI_INSTANCE_TOKEN`, `ZAPI_CLIENT_TOKEN`
 - Variável opcional no ambiente do cron: `ZAPI_WHATSAPP_TO` (destino padrão)
+- Erro `404 Not Found` no cron de pré-geração indica URL base incorreta (domínio antigo/incorreto no `APP_BASE_URL`).
+- O cron de pré-geração em [render.yaml](render.yaml) agora tenta primeiro `APP_BASE_URL` e, em caso de `404`, faz fallback automático para `https://controle-agua.onrender.com`.
+- Se ainda falhar: confirme no Render se `APP_BASE_URL` aponta para o serviço web correto e se `JOB_SECRET_TOKEN` é exatamente o mesmo no web e no cron.
 
 ## 🚀 Próximos Passos
 
