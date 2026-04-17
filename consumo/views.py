@@ -497,7 +497,19 @@ def pregerar_relatorios_job(request):
     lote_numero = request.GET.get('lote_numero') or request.POST.get('lote_numero')
     intervalo_segundos = request.GET.get('intervalo_segundos') or request.POST.get('intervalo_segundos')
     tentativas = request.GET.get('tentativas') or request.POST.get('tentativas')
+    permitir_lotes_incompletos_raw = (
+        request.GET.get('permitir_lotes_incompletos')
+        or request.POST.get('permitir_lotes_incompletos')
+        or request.GET.get('permitir-lotes-incompletos')
+        or request.POST.get('permitir-lotes-incompletos')
+    )
     sobrescrever = str(sobrescrever_raw).lower() in {'1', 'true', 'yes', 'sim'}
+    permitir_lotes_incompletos = str(permitir_lotes_incompletos_raw).lower() in {
+        '1',
+        'true',
+        'yes',
+        'sim',
+    }
 
     output = io.StringIO()
     kwargs = {'stdout': output, 'stderr': output}
@@ -513,6 +525,8 @@ def pregerar_relatorios_job(request):
         kwargs['intervalo_segundos'] = intervalo_segundos
     if tentativas:
         kwargs['tentativas'] = tentativas
+    if permitir_lotes_incompletos:
+        kwargs['permitir_lotes_incompletos'] = True
 
     try:
         call_command('pregerar_relatorios_mensais', **kwargs)
