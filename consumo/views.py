@@ -2196,7 +2196,10 @@ def exportar_graficos_lote_pdf(request, lote_id):
             incluir_fotos = incluir_fotos_param.lower() in ('1', 'true', 'sim', 'yes')
 
         max_fotos = 40
-        leituras_com_foto = [leitura for leitura in leituras_periodo if leitura.foto][:max_fotos] if incluir_fotos else []
+        leituras_com_foto = [
+            leitura for leitura in leituras_periodo
+            if data_inicio <= leitura.data_leitura.date() <= data_fim and leitura.foto
+        ][:max_fotos] if incluir_fotos else []
 
         if leituras_com_foto:
             elements.append(PageBreak())
