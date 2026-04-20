@@ -106,6 +106,7 @@ class Command(BaseCommand):
         falhas = 0
         ignorados_sem_whatsapp = 0
         ignorados_sem_pdf_cache = 0
+        fallbacks_pdf_para_texto = 0
         mensagens_tentadas = 0
         mensagens_enviadas = 0
         inicio_execucao = time.monotonic()
@@ -183,6 +184,14 @@ class Command(BaseCommand):
                             f"[OK] Lote {lote.numero} enviado para {destino_lote} | Tipo: {resultado.get('tipo', 'texto')} | SID: {resultado.get('sid')}"
                         )
                     )
+                    if resultado.get("tipo") == "texto_fallback":
+                        fallbacks_pdf_para_texto += 1
+                        erro_pdf = resultado.get("erro_pdf") or "motivo nao informado"
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f"[AVISO] Lote {lote.numero} para {destino_lote}: PDF nao enviado, fallback para texto. Motivo: {erro_pdf}"
+                            )
+                        )
                 except ConfiguracaoWhatsAppInvalida as exc:
                     raise CommandError(str(exc)) from exc
                 except Exception as exc:
@@ -209,6 +218,7 @@ class Command(BaseCommand):
                 "Finalizado. "
                 f"Enviados: {enviados} | Ignorados sem WhatsApp: {ignorados_sem_whatsapp} "
                 f"| Ignorados sem PDF cache: {ignorados_sem_pdf_cache} | Falhas: {falhas} "
+                f"| Fallbacks PDF->texto: {fallbacks_pdf_para_texto} "
                 f"| Mensagens enviadas: {mensagens_enviadas}/{mensagens_tentadas} "
                 f"| Tempo total: {horas:02d}:{minutos:02d}:{segundos:05.2f} "
                 f"| Media por mensagem: {media_por_mensagem:.2f}s"
