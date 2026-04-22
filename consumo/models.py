@@ -38,6 +38,18 @@ class Lote(models.Model):
         null=True,
         verbose_name='Nome do Proprietário'
     )
+    email_responsavel = models.EmailField(
+        max_length=254,
+        blank=True,
+        null=True,
+        verbose_name='E-mail do Responsável 1'
+    )
+    email_responsavel_2 = models.EmailField(
+        max_length=254,
+        blank=True,
+        null=True,
+        verbose_name='E-mail do Responsável 2'
+    )
     telefone_whatsapp = models.CharField(
         max_length=20,
         blank=True,

@@ -105,9 +105,9 @@ Local: `consumo/management/commands/`
 - `limpar_leituras.py`: remove leituras.
 - `limpar_dados_producao.py`: limpeza de dados de produção (cautela).
 - `pregerar_relatorios_mensais.py`: pré-gera PDFs por lote para envio do dia 20.
-- `enviar_whatsapp_mensal.py`: envia resumo/PDF aos moradores via WhatsApp.
+- `enviar_email_mensal.py`: envia resumo/PDF aos moradores por e-mail.
 
-### 8.1 Ciclo mensal de envio (WhatsApp)
+### 8.1 Ciclo mensal de envio (E-mail)
 - Data de coleta de referência: dia 15.
 - Intervalo usado no relatório enviado: de 16 do mês anterior até 15 do mês da coleta.
 - Exemplo: coleta em 15/02/2026 -> período de 16/01/2026 a 15/02/2026.

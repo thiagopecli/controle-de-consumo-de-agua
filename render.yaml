@@ -79,13 +79,13 @@ services:
         sync: false
 
   - type: cron
-    name: controle-agua-whatsapp-mensal
+    name: controle-agua-email-mensal
     env: python
     plan: free
     # Render usa UTC: 11:00 UTC = 08:00 no horário de Brasília
     schedule: "0 11 20 * *"
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "python manage.py enviar_whatsapp_mensal --enviar-pdf --intervalo-segundos 5"
+    startCommand: "python manage.py enviar_email_mensal --enviar-pdf --sem-fallback-texto --obrigar-relatorios-pregerados --intervalo-segundos 5"
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.2
@@ -99,23 +99,27 @@ services:
           property: connectionString
       - key: APP_BASE_URL
         sync: false
-      - key: ZAPI_INSTANCE_ID
+      - key: DEFAULT_FROM_EMAIL
         sync: false
-      - key: ZAPI_INSTANCE_TOKEN
+      - key: EMAIL_HOST
         sync: false
-      - key: ZAPI_CLIENT_TOKEN
+      - key: EMAIL_PORT
         sync: false
-      - key: ZAPI_WHATSAPP_TO
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: EMAIL_USE_TLS
         sync: false
 
   - type: cron
-    name: controle-agua-precheck-whatsapp-mensal
+    name: controle-agua-precheck-email-mensal
     env: python
     plan: free
     # Render usa UTC: 11:00 UTC = 08:00 no horario de Brasilia
     schedule: "0 11 19 * *"
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "python manage.py precheck_envio_whatsapp_mensal"
+    startCommand: "python manage.py precheck_envio_email_mensal --modo-estrito"
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.2
@@ -129,21 +133,27 @@ services:
           property: connectionString
       - key: APP_BASE_URL
         sync: false
-      - key: ZAPI_INSTANCE_ID
+      - key: DEFAULT_FROM_EMAIL
         sync: false
-      - key: ZAPI_INSTANCE_TOKEN
+      - key: EMAIL_HOST
         sync: false
-      - key: ZAPI_CLIENT_TOKEN
+      - key: EMAIL_PORT
+        sync: false
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: EMAIL_USE_TLS
         sync: false
 
   - type: cron
-    name: controle-agua-auditoria-whatsapp-lotes
+    name: controle-agua-auditoria-email-lotes
     env: python
     plan: free
     # Render usa UTC: 11:00 UTC = 08:00 no horario de Brasilia
     schedule: "0 11 18 * *"
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "python manage.py auditar_whatsapp_lotes"
+    startCommand: "python manage.py auditar_email_lotes"
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.2

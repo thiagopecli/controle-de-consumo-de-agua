@@ -70,9 +70,9 @@ class LoteForm(forms.ModelForm):
 @admin.register(Lote)
 class LoteAdmin(admin.ModelAdmin):
     form = LoteForm
-    list_display = ['numero', 'tipo', 'proprietario_nome', 'telefone_whatsapp', 'telefone_whatsapp_2', 'endereco', 'ativo', 'criado_em']
+    list_display = ['numero', 'tipo', 'proprietario_nome', 'email_responsavel', 'email_responsavel_2', 'telefone_whatsapp', 'telefone_whatsapp_2', 'endereco', 'ativo', 'criado_em']
     list_filter = ['tipo', 'ativo']
-    search_fields = ['numero', 'proprietario_nome', 'telefone_whatsapp', 'telefone_whatsapp_2', 'endereco']
+    search_fields = ['numero', 'proprietario_nome', 'email_responsavel', 'email_responsavel_2', 'telefone_whatsapp', 'telefone_whatsapp_2', 'endereco']
     ordering = ['numero']
 
 
