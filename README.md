@@ -37,8 +37,8 @@ Sistema completo para gerenciamento e monitoramento de consumo de água através
 
 - Web: `DATABASE_URL`, `APP_BASE_URL`, `JOB_SECRET_TOKEN`
 - Cron pregeracao (dia 15): `DATABASE_URL`, `APP_BASE_URL`, `JOB_SECRET_TOKEN`
-- Cron precheck (dia 19): `DATABASE_URL`, `APP_BASE_URL`, `ZAPI_INSTANCE_ID`, `ZAPI_INSTANCE_TOKEN`, `ZAPI_CLIENT_TOKEN`
-- Cron envio (dia 20): `DATABASE_URL`, `APP_BASE_URL`, `ZAPI_INSTANCE_ID`, `ZAPI_INSTANCE_TOKEN`, `ZAPI_CLIENT_TOKEN`
+- Cron precheck (dia 19): `DATABASE_URL`, `APP_BASE_URL`, `DEFAULT_FROM_EMAIL`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`
+- Cron envio (dia 20): `DATABASE_URL`, `APP_BASE_URL`, `DEFAULT_FROM_EMAIL`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`
 
 ### Passo a Passo
 
@@ -316,27 +316,25 @@ curl "http://localhost:8000/api/leituras/?data_inicio=2026-01-01&data_fim=2026-0
 - Configuração de CORS para APIs
 - Variáveis de ambiente para dados sensíveis
 
-## 📲 WhatsApp Automático (dia 20)
+## 📧 E-mail Automático (dia 20)
 
 - Pré-geração (dia 15): `python manage.py pregerar_relatorios_mensais --data-coleta 2026-02-15`
 - Pasta gerada: `media/relatorios_mensais/2026-02-15/`
 - Para lotes sem dados no período, o sistema gera um PDF de fallback "sem dados" para manter o envio em arquivo.
 - Em produção (Render), a pré-geração do dia 15 roda via endpoint interno do serviço web (`/jobs/pregerar-relatorios/`) para garantir acesso ao disco com as fotos.
 - A pré-geração baixa cada PDF pela mesma URL usada no botão do lote (`/lotes/<id>/graficos/exportar/pdf/?periodo=personalizado...`).
-- Envio automático no dia 20 (usa os PDFs já pré-gerados, somente PDF): `python manage.py enviar_whatsapp_mensal --enviar-pdf --sem-fallback-texto --obrigar-relatorios-pregerados`
+- Envio automático no dia 20 (usa os PDFs já pré-gerados, somente PDF): `python manage.py enviar_email_mensal --enviar-pdf --sem-fallback-texto --obrigar-relatorios-pregerados`
 - Período padrão com cache: ciclo mensal de leitura (16 do mês anterior até 15 do mês da coleta)
-- Provedor usado: **Z-API** (`https://app.z-api.io/app`)
-- Formato de destino aceito: `+55...` ou `55...` (somente dígitos também funciona)
-- Simulação sem envio real: `python manage.py enviar_whatsapp_mensal --dry-run --data-referencia 2026-02-20`
-- Envio com PDF sem usar cache (comportamento antigo): `python manage.py enviar_whatsapp_mensal --enviar-pdf --nao-usar-relatorios-pregerados`
-- Envio com PDF sem fallback: `python manage.py enviar_whatsapp_mensal --enviar-pdf --sem-fallback-texto`
-- Teste isolado com PDF (ciclo mensal 16 a 15): `python manage.py enviar_whatsapp_teste --enviar-pdf --to 55219SEUNUMERO --pdf-url "https://SEU_DOMINIO/lotes/1/graficos/exportar/pdf/?periodo=personalizado&data_inicio=2026-01-16&data_fim=2026-02-15"`
-- Se quiser exigir cache mesmo fora do dia 20: `python manage.py enviar_whatsapp_mensal --enviar-pdf --obrigar-relatorios-pregerados`
+- Formato de destino: campos `email_responsavel` e `email_responsavel_2` no lote
+- Simulação sem envio real: `python manage.py enviar_email_mensal --dry-run --data-referencia 2026-02-20`
+- Envio com PDF sem usar cache (comportamento antigo): `python manage.py enviar_email_mensal --enviar-pdf --nao-usar-relatorios-pregerados`
+- Envio com PDF sem fallback: `python manage.py enviar_email_mensal --enviar-pdf --sem-fallback-texto`
+- Teste isolado com PDF (ciclo mensal 16 a 15): `python manage.py enviar_email_teste --enviar-pdf --to morador@dominio.com --pdf-url "https://SEU_DOMINIO/lotes/1/graficos/exportar/pdf/?periodo=personalizado&data_inicio=2026-01-16&data_fim=2026-02-15"`
+- Se quiser exigir cache mesmo fora do dia 20: `python manage.py enviar_email_mensal --enviar-pdf --obrigar-relatorios-pregerados`
 - Agendamento em produção: serviço `cron` no [render.yaml](render.yaml) com schedule `0 11 20 * *` (08:00 no horário de Brasília)
 - Observação de fuso: o Render agenda em UTC; por isso `0 11 20 * *` equivale a 08:00 em Brasília.
 - Segurança do job interno: configure `JOB_SECRET_TOKEN` e envie no header `X-Job-Token`.
-- Variáveis obrigatórias no ambiente do cron: `DATABASE_URL`, `APP_BASE_URL`, `ZAPI_INSTANCE_ID`, `ZAPI_INSTANCE_TOKEN`, `ZAPI_CLIENT_TOKEN`
-- Variável opcional no ambiente do cron: `ZAPI_WHATSAPP_TO` (destino padrão)
+- Variáveis obrigatórias no ambiente do cron: `DATABASE_URL`, `APP_BASE_URL`, `DEFAULT_FROM_EMAIL`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`
 - Erro `404 Not Found` no cron de pré-geração indica URL base incorreta (domínio antigo/incorreto no `APP_BASE_URL`).
 - O cron de pré-geração em [render.yaml](render.yaml) agora tenta primeiro `APP_BASE_URL` e, em caso de `404`, faz fallback automático para `https://controle-agua.onrender.com`.
 - Se ainda falhar: confirme no Render se `APP_BASE_URL` aponta para o serviço web correto e se `JOB_SECRET_TOKEN` é exatamente o mesmo no web e no cron.
@@ -348,7 +346,7 @@ Conforme mencionado, você pode adicionar:
 - [ ] Autenticação JWT para API
 - [ ] Notificações de consumo anormal
 - [x] **Exportação de relatórios (PDF)** ✅
-- [ ] Sistema de alertas por email
+- [x] Sistema de alertas por email
 - [ ] Dashboard mobile responsivo
 - [ ] Integração com sensores IoT
 - [ ] Análise preditiva de consumo
