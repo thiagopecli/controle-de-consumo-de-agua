@@ -1,4 +1,5 @@
 from datetime import datetime
+import os
 
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
@@ -46,6 +47,7 @@ class Command(BaseCommand):
         data_coleta = calcular_data_coleta(data_referencia)
         data_inicio, data_fim = intervalo_mensal_da_coleta(data_coleta)
         pasta_cache = pasta_relatorios_coleta(data_coleta)
+        cache_remoto_habilitado = self._cache_remoto_habilitado()
 
         self.stdout.write(
             "Precheck envio e-mail mensal | "
@@ -83,7 +85,15 @@ class Command(BaseCommand):
         if cache_existe:
             self.stdout.write(self.style.SUCCESS(f"[OK] Pasta de cache encontrada: {pasta_cache}"))
         else:
-            self.stdout.write(self.style.WARNING(f"[AVISO] Pasta de cache nao encontrada: {pasta_cache}"))
+            if cache_remoto_habilitado:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"[AVISO] Pasta de cache local nao encontrada: {pasta_cache}. "
+                        "Ambiente remoto detectado via APP_BASE_URL; sem bloqueio critico por cache local."
+                    )
+                )
+            else:
+                self.stdout.write(self.style.WARNING(f"[AVISO] Pasta de cache nao encontrada: {pasta_cache}"))
 
         for lote in lotes:
             destinos = self._destinos_lote(lote)
@@ -138,7 +148,7 @@ class Command(BaseCommand):
         pendencias_criticas = []
         if faltantes_env:
             pendencias_criticas.append("variaveis_criticas_ausentes")
-        if not cache_existe:
+        if not cache_existe and not cache_remoto_habilitado:
             pendencias_criticas.append("pasta_cache_ausente")
         if total_com_email == 0:
             pendencias_criticas.append("nenhum_lote_com_email")
@@ -159,6 +169,12 @@ class Command(BaseCommand):
             return
 
         self.stdout.write(self.style.SUCCESS("Precheck concluido com sucesso. Ambiente pronto para o envio do dia 20."))
+
+    def _cache_remoto_habilitado(self):
+        base_url = os.getenv("APP_BASE_URL", "").strip().lower()
+        if not base_url:
+            return False
+        return not ("127.0.0.1" in base_url or "localhost" in base_url)
 
     def _resolver_data_referencia(self, valor):
         if not valor:
