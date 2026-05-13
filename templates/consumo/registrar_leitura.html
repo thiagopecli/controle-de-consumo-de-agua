@@ -298,13 +298,17 @@ function extrairTextoErroApi(data, fallback) {
 }
 
 function erroIndicaLeituraRegressiva(data, erroTexto) {
-    const codigo = String((data && data.codigo) || '').toUpperCase();
-    if (codigo === 'LEITURA_REGRESSIVA') {
+    const texto = `${erroTexto || ''} ${JSON.stringify(data || {})}`.toLowerCase();
+
+    if (texto.includes('leitura_regressiva') || texto.includes('leitura regressiva')) {
         return true;
     }
 
-    const texto = String(erroTexto || '').toLowerCase();
-    return texto.includes('menor que a última leitura') || texto.includes('menor que a ultima leitura');
+    if (texto.includes('menor que a última leitura') || texto.includes('menor que a ultima leitura')) {
+        return true;
+    }
+
+    return false;
 }
 
 function erroIndicaLeituraDuplicada(erroTexto) {
@@ -705,16 +709,17 @@ document.getElementById('leituraForm').addEventListener('submit', async function
                 return;
             }
 
+            if (erroIndicaLeituraRegressiva(resultado.data, resultado.erro)) {
+                const registroRecusado = obterDescricaoRegistro(payload);
+                exibirMensagem(
+                    'alert-warning',
+                    `⚠️ Registro recusado por leitura menor que a anterior: ${registroRecusado}.`,
+                    12000
+                );
+                return;
+            }
+
             if (resultado.status >= 400 && resultado.status < 500) {
-                if (erroIndicaLeituraRegressiva(resultado.data, resultado.erro)) {
-                    const registroRecusado = obterDescricaoRegistro(payload);
-                    exibirMensagem(
-                        'alert-warning',
-                        `⚠️ Registro recusado por leitura menor que a anterior: ${registroRecusado}.`,
-                        12000
-                    );
-                    return;
-                }
                 exibirMensagem('alert-error', `❌ Erro ao registrar leitura: ${resultado.erro}`);
                 return;
             }
