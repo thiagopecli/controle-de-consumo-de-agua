@@ -53,10 +53,15 @@
             
             <div class="form-group">
                 <label for="foto">Foto da Leitura *</label>
-                <input type="file" id="foto" name="foto" accept="image/*" capture="environment" required style="display: none;">
-                <button type="button" id="btnFoto" class="btn btn-secondary btn-lg" style="width: 100%;">
-                    📷 Tirar foto
-                </button>
+                <input type="file" id="foto" name="foto" accept="image/*" required style="display: none;">
+                <div class="form-row" style="gap: 0.75rem;">
+                    <button type="button" id="btnFotoCamera" class="btn btn-secondary btn-lg" style="flex: 1;">
+                        📷 Tirar foto
+                    </button>
+                    <button type="button" id="btnFotoGaleria" class="btn btn-secondary btn-lg" style="flex: 1;">
+                        🖼️ Galeria
+                    </button>
+                </div>
                 <small id="fotoSelecionada" style="display: block; margin-top: 0.5rem;">Nenhuma foto selecionada</small>
             </div>
             
@@ -591,13 +596,24 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     const fotoInput = document.getElementById('foto');
-    const btnFoto = document.getElementById('btnFoto');
+    const btnFotoCamera = document.getElementById('btnFotoCamera');
+    const btnFotoGaleria = document.getElementById('btnFotoGaleria');
     const fotoSelecionada = document.getElementById('fotoSelecionada');
 
-    if (fotoInput && btnFoto) {
-        btnFoto.addEventListener('click', function() {
-            fotoInput.click();
-        });
+    if (fotoInput) {
+        if (btnFotoCamera) {
+            btnFotoCamera.addEventListener('click', function() {
+                fotoInput.setAttribute('capture', 'environment');
+                fotoInput.click();
+            });
+        }
+
+        if (btnFotoGaleria) {
+            btnFotoGaleria.addEventListener('click', function() {
+                fotoInput.removeAttribute('capture');
+                fotoInput.click();
+            });
+        }
 
         fotoInput.addEventListener('change', function() {
             if (fotoSelecionada) {
