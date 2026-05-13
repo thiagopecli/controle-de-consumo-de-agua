@@ -369,14 +369,34 @@ async function montarPayloadFormulario() {
         observacoes: document.getElementById('observacoes').value
     };
 
-    const foto = document.getElementById('foto').files[0];
-    if (!foto) {
+    // Aceita vários inputs de foto (foto, fotoCamera, fotoGaleria) para compatibilidade
+    let fotoFile = null;
+    const fotoEl = document.getElementById('foto');
+    if (fotoEl && fotoEl.files && fotoEl.files.length) {
+        fotoFile = fotoEl.files[0];
+    } else {
+        const fotoCam = document.getElementById('fotoCamera');
+        const fotoGal = document.getElementById('fotoGaleria');
+        if (fotoCam && fotoCam.files && fotoCam.files.length) {
+            fotoFile = fotoCam.files[0];
+        } else if (fotoGal && fotoGal.files && fotoGal.files.length) {
+            fotoFile = fotoGal.files[0];
+        } else {
+            // Última tentativa: qualquer input file com name="foto"
+            const anyFoto = document.querySelector('input[type=file][name="foto"]');
+            if (anyFoto && anyFoto.files && anyFoto.files.length) {
+                fotoFile = anyFoto.files[0];
+            }
+        }
+    }
+
+    if (!fotoFile) {
         throw new Error('Anexe uma foto da leitura antes de salvar.');
     }
 
-    payload.foto_nome = foto.name;
-    payload.foto_tipo = foto.type || 'image/jpeg';
-    payload.foto_data_url = await converterArquivoParaDataUrl(foto);
+    payload.foto_nome = fotoFile.name;
+    payload.foto_tipo = fotoFile.type || 'image/jpeg';
+    payload.foto_data_url = await converterArquivoParaDataUrl(fotoFile);
 
     return payload;
 }
@@ -550,9 +570,11 @@ function resetarFormularioLeitura() {
     const fotoCamera = document.getElementById('fotoCamera');
     const fotoGaleria = document.getElementById('fotoGaleria');
     const fotoNomeArquivo = document.getElementById('fotoNomeArquivo');
+    const fotoInputPrincipal = document.getElementById('foto');
     
     if (fotoCamera) fotoCamera.value = '';
     if (fotoGaleria) fotoGaleria.value = '';
+    if (fotoInputPrincipal) fotoInputPrincipal.value = '';
     if (fotoNomeArquivo) fotoNomeArquivo.style.display = 'none';
 }
 
@@ -622,15 +644,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function atualizarNomeArquivo(file) {
         if (file) {
-            nomeArquivo.textContent = file.name;
-            fotoNomeArquivo.style.display = 'block';
-            // Sincroniza o arquivo para o input principal
-            const dataTransfer = new DataTransfer();
-            dataTransfer.items.add(file);
-            fotoInput.files = dataTransfer.files;
+            if (nomeArquivo) nomeArquivo.textContent = file.name;
+            if (fotoNomeArquivo) fotoNomeArquivo.style.display = 'block';
+            // Sincroniza o arquivo para o input principal (se existir)
+            if (fotoInput) {
+                try {
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(file);
+                    fotoInput.files = dataTransfer.files;
+                } catch (err) {
+                    // Alguns navegadores podem restringir manipulação de FileList; ignorar sem bloquear
+                }
+            }
         } else {
-            fotoNomeArquivo.style.display = 'none';
-            fotoInput.files = new DataTransfer().files;
+            if (fotoNomeArquivo) fotoNomeArquivo.style.display = 'none';
+            if (fotoInput) {
+                try {
+                    fotoInput.files = new DataTransfer().files;
+                } catch (err) {}
+            }
         }
     }
 
