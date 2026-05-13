@@ -35,7 +35,6 @@ from reportlab.lib.utils import ImageReader
 from .forms import CadastroUsuarioForm, LoginForm
 from .models import Lote, Hidrometro, Leitura
 from .services.relatorios_cache import calcular_data_coleta, pasta_relatorios_coleta
-from .services.whatsapp import processar_webhook_desconexao_whatsapp
 from .serializers import (
     LoteSerializer, 
     HidrometroSerializer, 
@@ -546,66 +545,6 @@ def pregerar_relatorios_job(request):
             'output': output.getvalue(),
         }
     )
-
-
-@csrf_exempt
-def webhook_zapi_desconectado(request):
-    """
-    Webhook chamado pela Z-API quando a instancia perde conexao.
-    """
-    if request.method not in {'POST', 'PUT'}:
-        return JsonResponse({'erro': 'Metodo nao permitido'}, status=405)
-
-    segredo_configurado = os.getenv('ZAPI_WEBHOOK_SECRET', '').strip()
-    segredo_recebido = (
-        request.headers.get('X-ZAPI-Webhook-Secret')
-        or request.headers.get('X-Webhook-Token')
-        or ''
-    ).strip()
-
-    if segredo_configurado and not hmac.compare_digest(segredo_recebido, segredo_configurado):
-        return JsonResponse({'erro': 'Nao autorizado'}, status=401)
-
-    try:
-        payload = json.loads((request.body or b'{}').decode('utf-8'))
-    except Exception:
-        payload = {}
-
-    try:
-        resultado = processar_webhook_desconexao_whatsapp(payload=payload)
-    except Exception as exc:  # noqa: BLE001
-        LOGGER.exception('Falha ao processar webhook de desconexao da Z-API: %s', exc)
-        return JsonResponse({'ok': False, 'erro': str(exc)}, status=500)
-
-    status_http = 200 if resultado.get('ok') else 202
-    return JsonResponse({'ok': bool(resultado.get('ok')), 'resultado': resultado}, status=status_http)
-
-
-@csrf_exempt
-def webhook_zapi_conectado(request):
-    """
-    Webhook de auditoria de reconexao/conexao da Z-API.
-    """
-    if request.method not in {'POST', 'PUT'}:
-        return JsonResponse({'erro': 'Metodo nao permitido'}, status=405)
-
-    segredo_configurado = os.getenv('ZAPI_WEBHOOK_SECRET', '').strip()
-    segredo_recebido = (
-        request.headers.get('X-ZAPI-Webhook-Secret')
-        or request.headers.get('X-Webhook-Token')
-        or ''
-    ).strip()
-
-    if segredo_configurado and not hmac.compare_digest(segredo_recebido, segredo_configurado):
-        return JsonResponse({'erro': 'Nao autorizado'}, status=401)
-
-    try:
-        payload = json.loads((request.body or b'{}').decode('utf-8'))
-    except Exception:
-        payload = {}
-
-    LOGGER.info('Webhook conectado recebido da Z-API: %s', payload)
-    return JsonResponse({'ok': True})
 
 
 @admin_required
