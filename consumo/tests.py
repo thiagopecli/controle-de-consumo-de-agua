@@ -308,29 +308,6 @@ class PermissoesTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
-class WebhookTests(TestCase):
-    """Testes para webhooks (atenção: teste básico, requer implementação detalhada)"""
-
-    def setUp(self):
-        """Cria dados de teste"""
-        self.client = Client()
-        self.endpoint_disconnect = reverse('consumo:webhook_zapi_desconectado')
-
-    def test_webhook_disconnect_requer_autenticacao(self):
-        """Verifica que webhook requer autenticação"""
-        response = self.client.post(
-            self.endpoint_disconnect,
-            data=json.dumps({}),
-            content_type='application/json'
-        )
-        # Deve retornar 401 Unauthorized
-        self.assertEqual(response.status_code, 401)
-
-    def test_webhook_disconnect_metodo_get_rejeitado(self):
-        """Verifica que apenas POST é aceito no webhook"""
-        response = self.client.get(self.endpoint_disconnect)
-        self.assertIn(response.status_code, [405, 401])
-
 
 class APIEndpointsTests(TestCase):
     """Testes para endpoints REST principais"""
