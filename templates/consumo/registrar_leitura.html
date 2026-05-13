@@ -52,8 +52,20 @@
             </div>
             
             <div class="form-group">
-                <label for="foto">Foto da Leitura *</label>
-                <input type="file" id="foto" name="foto" class="form-control" accept="image/*" capture="environment" required>
+                <label>Foto da Leitura *</label>
+                <div class="foto-opcoes">
+                    <button type="button" id="btnCamera" class="btn btn-outline">
+                        📷 Câmera
+                    </button>
+                    <button type="button" id="btnGaleria" class="btn btn-outline">
+                        🖼️ Galeria
+                    </button>
+                </div>
+                <input type="file" id="fotoCamera" name="foto" class="form-control" accept="image/*" capture="environment" required style="display: none;">
+                <input type="file" id="fotoGaleria" name="foto" class="form-control" accept="image/*" required style="display: none;">
+                <div id="fotoNomeArquivo" class="arquivo-selecionado" style="display: none;">
+                    ✓ Arquivo selecionado: <span id="nomeArquivo"></span>
+                </div>
             </div>
             
             <div class="form-actions">
@@ -533,6 +545,15 @@ function resetarFormularioLeitura() {
 
     const responsavelInput = document.getElementById('responsavel');
     responsavelInput.value = RESPONSAVEL_PADRAO;
+
+    // Limpar inputs de foto
+    const fotoCamera = document.getElementById('fotoCamera');
+    const fotoGaleria = document.getElementById('fotoGaleria');
+    const fotoNomeArquivo = document.getElementById('fotoNomeArquivo');
+    
+    if (fotoCamera) fotoCamera.value = '';
+    if (fotoGaleria) fotoGaleria.value = '';
+    if (fotoNomeArquivo) fotoNomeArquivo.style.display = 'none';
 }
 
 function configurarFormatacaoCampoLeitura() {
@@ -589,6 +610,55 @@ document.addEventListener('DOMContentLoaded', function() {
     configurarFormatacaoCampoLeitura();
     atualizarStatusConexao();
     atualizarContadorPendentes();
+
+    // Configurar escolha entre câmera e galeria
+    const btnCamera = document.getElementById('btnCamera');
+    const btnGaleria = document.getElementById('btnGaleria');
+    const fotoCamera = document.getElementById('fotoCamera');
+    const fotoGaleria = document.getElementById('fotoGaleria');
+    const fotoNomeArquivo = document.getElementById('fotoNomeArquivo');
+    const nomeArquivo = document.getElementById('nomeArquivo');
+    const fotoInput = document.getElementById('foto');
+
+    function atualizarNomeArquivo(file) {
+        if (file) {
+            nomeArquivo.textContent = file.name;
+            fotoNomeArquivo.style.display = 'block';
+            // Sincroniza o arquivo para o input principal
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            fotoInput.files = dataTransfer.files;
+        } else {
+            fotoNomeArquivo.style.display = 'none';
+            fotoInput.files = new DataTransfer().files;
+        }
+    }
+
+    if (btnCamera) {
+        btnCamera.addEventListener('click', function(e) {
+            e.preventDefault();
+            fotoCamera.click();
+        });
+    }
+
+    if (btnGaleria) {
+        btnGaleria.addEventListener('click', function(e) {
+            e.preventDefault();
+            fotoGaleria.click();
+        });
+    }
+
+    if (fotoCamera) {
+        fotoCamera.addEventListener('change', function() {
+            atualizarNomeArquivo(this.files[0]);
+        });
+    }
+
+    if (fotoGaleria) {
+        fotoGaleria.addEventListener('change', function() {
+            atualizarNomeArquivo(this.files[0]);
+        });
+    }
 
     const syncNowButton = document.getElementById('syncNowButton');
     if (syncNowButton) {
