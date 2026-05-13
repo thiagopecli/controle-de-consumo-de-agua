@@ -53,7 +53,11 @@
             
             <div class="form-group">
                 <label for="foto">Foto da Leitura *</label>
-                <input type="file" id="foto" name="foto" class="form-control" accept="image/*" required>
+                <input type="file" id="foto" name="foto" accept="image/*" capture="environment" required style="display: none;">
+                <button type="button" id="btnFoto" class="btn btn-secondary btn-lg" style="width: 100%;">
+                    📷 Tirar foto
+                </button>
+                <small id="fotoSelecionada" style="display: block; margin-top: 0.5rem;">Nenhuma foto selecionada</small>
             </div>
             
             <div class="form-actions">
@@ -584,6 +588,24 @@ document.addEventListener('DOMContentLoaded', function() {
     const responsavelInput = document.getElementById('responsavel');
     if (responsavelInput && !responsavelInput.value) {
         responsavelInput.value = RESPONSAVEL_PADRAO;
+    }
+
+    const fotoInput = document.getElementById('foto');
+    const btnFoto = document.getElementById('btnFoto');
+    const fotoSelecionada = document.getElementById('fotoSelecionada');
+
+    if (fotoInput && btnFoto) {
+        btnFoto.addEventListener('click', function() {
+            fotoInput.click();
+        });
+
+        fotoInput.addEventListener('change', function() {
+            if (fotoSelecionada) {
+                fotoSelecionada.textContent = this.files && this.files.length > 0
+                    ? this.files[0].name
+                    : 'Nenhuma foto selecionada';
+            }
+        });
     }
 
     configurarFormatacaoCampoLeitura();
