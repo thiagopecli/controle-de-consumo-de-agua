@@ -52,6 +52,18 @@ class Lote(models.Model):
         verbose_name='WhatsApp do Proprietário 2',
         help_text='Opcional. Formato: +55DDDNUMERO (apenas dígitos com +, sem espaços)'
     )
+    email_proprietario = models.EmailField(
+        blank=True,
+        null=True,
+        verbose_name='Email do Proprietário 1',
+        help_text='Email para receber relatórios'
+    )
+    email_proprietario_2 = models.EmailField(
+        blank=True,
+        null=True,
+        verbose_name='Email do Proprietário 2',
+        help_text='Opcional. Email adicional para receber relatórios'
+    )
     ativo = models.BooleanField(
         default=True,
         verbose_name='Ativo'
@@ -64,11 +76,16 @@ class Lote(models.Model):
         auto_now=True,
         verbose_name='Atualizado em'
     )
+    numero_sequencia = models.IntegerField(
+        default=0,
+        verbose_name='Número de Sequência (para ordenação)',
+        help_text='Campo automático para ordenação numérica correta dos lotes'
+    )
 
     class Meta:
         verbose_name = 'Lote'
         verbose_name_plural = 'Lotes'
-        ordering = ['numero']
+        ordering = ['numero_sequencia', 'numero']
 
     def __str__(self):
         return f"Lote {self.numero} - {self.get_tipo_display()}"

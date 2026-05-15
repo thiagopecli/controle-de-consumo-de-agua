@@ -9,6 +9,7 @@ from .models import Lote, Hidrometro, Leitura, UsuarioPerfil
 class LoteForm(forms.ModelForm):
     """Formulário do admin para Lote que ajuda a preencher e normalizar
     os campos de WhatsApp usando o DDI do Brasil como padrão (+55).
+    Inclui validação de emails para relatórios.
     """
     telefone_whatsapp = forms.CharField(
         required=False,
@@ -25,6 +26,18 @@ class LoteForm(forms.ModelForm):
             'placeholder': 'Ex: 81999887766 (opcional)',
         }),
         initial='+55'
+    )
+    email_proprietario = forms.EmailField(
+        required=False,
+        widget=forms.EmailInput(attrs={
+            'placeholder': 'Ex: proprietario@email.com',
+        })
+    )
+    email_proprietario_2 = forms.EmailField(
+        required=False,
+        widget=forms.EmailInput(attrs={
+            'placeholder': 'Ex: outro@email.com (opcional)',
+        })
     )
 
     class Meta:
@@ -66,14 +79,34 @@ class LoteForm(forms.ModelForm):
             return ''
         return self._normalizar_telefone(val)
 
+    def clean_email_proprietario(self):
+        email = (self.cleaned_data.get('email_proprietario') or '').strip()
+        if email:
+            # Valida o formato do email
+            try:
+                forms.EmailField().clean(email)
+            except ValidationError:
+                raise ValidationError('Email inválido. Verifique o formato.')
+        return email
+
+    def clean_email_proprietario_2(self):
+        email = (self.cleaned_data.get('email_proprietario_2') or '').strip()
+        if email:
+            # Valida o formato do email
+            try:
+                forms.EmailField().clean(email)
+            except ValidationError:
+                raise ValidationError('Email inválido. Verifique o formato.')
+        return email
+
 
 @admin.register(Lote)
 class LoteAdmin(admin.ModelAdmin):
     form = LoteForm
-    list_display = ['numero', 'tipo', 'proprietario_nome', 'telefone_whatsapp', 'telefone_whatsapp_2', 'endereco', 'ativo', 'criado_em']
+    list_display = ['numero', 'tipo', 'proprietario_nome', 'telefone_whatsapp', 'telefone_whatsapp_2', 'email_proprietario', 'email_proprietario_2', 'endereco', 'ativo', 'criado_em']
     list_filter = ['tipo', 'ativo']
-    search_fields = ['numero', 'proprietario_nome', 'telefone_whatsapp', 'telefone_whatsapp_2', 'endereco']
-    ordering = ['numero']
+    search_fields = ['numero', 'proprietario_nome', 'telefone_whatsapp', 'telefone_whatsapp_2', 'email_proprietario', 'email_proprietario_2', 'endereco']
+    ordering = ['numero_sequencia', 'numero']
 
 
 @admin.register(Hidrometro)
