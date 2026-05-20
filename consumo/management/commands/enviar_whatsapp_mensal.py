@@ -245,6 +245,9 @@ class Command(BaseCommand):
         except ValueError as exc:
             raise CommandError("--data-referencia deve estar no formato YYYY-MM-DD") from exc
 
+    def _data_leitura_local(self, leitura):
+        return timezone.localtime(leitura.data_leitura)
+
     def _calcular_consumo_lote_litros(self, lote, data_inicio, data_fim):
         consumo_total_m3 = Decimal("0")
         for hidrometro in lote.hidrometros.filter(ativo=True).only("id"):
@@ -268,7 +271,7 @@ class Command(BaseCommand):
                 leitura_atual = leituras_para_calculo[i]
                 leitura_anterior = leituras_para_calculo[i - 1]
 
-                if leitura_atual.data_leitura.date() < data_inicio:
+                if self._data_leitura_local(leitura_atual).date() < data_inicio:
                     continue
 
                 delta = leitura_atual.leitura - leitura_anterior.leitura
