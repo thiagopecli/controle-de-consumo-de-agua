@@ -21,9 +21,11 @@ import io
 import os
 import hmac
 import logging
+import shutil
 import zipfile
 import glob
 import mimetypes
+from pathlib import Path
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
@@ -135,6 +137,85 @@ def _desenhar_marca_dagua_logo(canvas, doc):
         canvas.restoreState()
     except Exception:
         return
+
+
+def _resolver_foto_para_pdf(leitura):
+    if not leitura.foto:
+        return None
+
+    foto_source = None
+
+    try:
+        leitura.foto.open('rb')
+        conteudo = leitura.foto.read()
+        if conteudo:
+            foto_source = io.BytesIO(conteudo)
+    except Exception:
+        foto_source = None
+    finally:
+        try:
+            leitura.foto.close()
+        except Exception:
+            pass
+
+    if foto_source is not None:
+        return foto_source
+
+    nome_relativo = getattr(leitura.foto, 'name', '') or str(leitura.foto)
+    if not nome_relativo:
+        return None
+
+    candidatos = []
+    try:
+        caminho_exato = Path(settings.MEDIA_ROOT) / nome_relativo
+        candidatos.append(caminho_exato)
+    except Exception:
+        pass
+
+    try:
+        if hasattr(leitura.foto, 'path'):
+            candidatos.append(Path(leitura.foto.path))
+    except Exception:
+        pass
+
+    try:
+        if hasattr(leitura.foto, 'file') and getattr(leitura.foto.file, 'name', None):
+            candidatos.append(Path(leitura.foto.file.name))
+    except Exception:
+        pass
+
+    for candidato in candidatos:
+        try:
+            if candidato.is_file():
+                return str(candidato)
+        except Exception:
+            continue
+
+    nome_arquivo = Path(nome_relativo).name
+    if not nome_arquivo:
+        return None
+
+    try:
+        for arquivo_encontrado in Path(settings.MEDIA_ROOT).rglob(nome_arquivo):
+            if not arquivo_encontrado.is_file():
+                continue
+
+            destino = Path(settings.MEDIA_ROOT) / nome_relativo
+            try:
+                destino.parent.mkdir(parents=True, exist_ok=True)
+                if arquivo_encontrado.resolve() != destino.resolve():
+                    shutil.copy2(arquivo_encontrado, destino)
+                return str(destino)
+            except Exception:
+                return str(arquivo_encontrado)
+    except Exception:
+        return None
+
+    return None
+
+
+def _data_leitura_local(leitura):
+    return timezone.localtime(leitura.data_leitura)
 
 
 class LoteViewSet(viewsets.ModelViewSet):
@@ -742,6 +823,41 @@ def visualizar_foto_leitura(request, leitura_id):
     return response
 
 
+@csrf_exempt
+def baixar_foto_leitura_job(request, leitura_id):
+    if request.method != 'GET':
+        return JsonResponse({'erro': 'Metodo nao permitido'}, status=405)
+
+    token_configurado = os.getenv('JOB_SECRET_TOKEN', '').strip()
+    token_recebido = (request.headers.get('X-Job-Token') or '').strip()
+
+    if not token_configurado:
+        return JsonResponse({'erro': 'Servico indisponivel: JOB_SECRET_TOKEN nao configurado'}, status=503)
+
+    if not token_recebido or not hmac.compare_digest(token_recebido, token_configurado):
+        return JsonResponse({'erro': 'Nao autorizado'}, status=401)
+
+    leitura = get_object_or_404(Leitura, id=leitura_id)
+    if not leitura.foto:
+        return JsonResponse({'erro': 'Leitura sem foto anexada'}, status=404)
+
+    if not leitura.foto.name or not leitura.foto.storage.exists(leitura.foto.name):
+        return JsonResponse({'erro': 'Foto indisponivel no armazenamento'}, status=404)
+
+    nome_arquivo = leitura.foto.name.split('/')[-1]
+    tipo_conteudo, _ = mimetypes.guess_type(nome_arquivo)
+    tipo_conteudo = tipo_conteudo or 'application/octet-stream'
+
+    try:
+        leitura.foto.open('rb')
+    except FileNotFoundError:
+        return JsonResponse({'erro': 'Foto indisponivel no armazenamento'}, status=404)
+
+    response = FileResponse(leitura.foto, content_type=tipo_conteudo)
+    response['Content-Disposition'] = f'inline; filename="{nome_arquivo}"'
+    return response
+
+
 @login_required
 def registrar_leitura(request):
     """Formulário para registrar leituras"""
@@ -839,7 +955,7 @@ def detalhes_hidrometro(request, hidrometro_id):
         leitura_anterior = leituras_para_calculo[i - 1]
 
         # Só contabilizar se a leitura ATUAL estiver dentro do período filtrado
-        if leitura_atual.data_leitura.date() < data_inicio:
+        if _data_leitura_local(leitura_atual).date() < data_inicio:
             continue
 
         diferenca = float(leitura_atual.leitura) - float(leitura_anterior.leitura)
@@ -855,13 +971,13 @@ def detalhes_hidrometro(request, hidrometro_id):
         leitura_anterior = leituras_para_calculo[i - 1]
 
         # Só contabilizar se a leitura ATUAL estiver dentro do período filtrado
-        if leitura_atual.data_leitura.date() < data_inicio:
+        if _data_leitura_local(leitura_atual).date() < data_inicio:
             continue
 
         diferenca = float(leitura_atual.leitura) - float(leitura_anterior.leitura)
         if diferenca > 0:
             consumo_litros = diferenca * 1000
-            dia_str = leitura_atual.data_leitura.strftime('%d/%m')
+            dia_str = _data_leitura_local(leitura_atual).strftime('%d/%m')
             consumo_por_dia[dia_str] += consumo_litros
 
     consumo_dia_lista = [
@@ -877,13 +993,13 @@ def detalhes_hidrometro(request, hidrometro_id):
         leitura_anterior = leituras_para_calculo[i - 1]
 
         # Só contabilizar se a leitura ATUAL estiver dentro do período filtrado
-        if leitura_atual.data_leitura.date() < data_inicio:
+        if _data_leitura_local(leitura_atual).date() < data_inicio:
             continue
 
         diferenca = float(leitura_atual.leitura) - float(leitura_anterior.leitura)
         if diferenca > 0:
             consumo_litros = diferenca * 1000
-            mes_numero = leitura_atual.data_leitura.month
+            mes_numero = _data_leitura_local(leitura_atual).month
             consumo_por_mes[mes_numero] += consumo_litros
     
     # Sempre exibir todos os 12 meses em português
@@ -1961,7 +2077,7 @@ def exportar_graficos_lote_pdf(request, lote_id):
                 continue
 
             consumo_litros = diferenca * 1000
-            data_leitura_atual = leitura_atual.data_leitura.date()
+            data_leitura_atual = _data_leitura_local(leitura_atual).date()
 
             if data_leitura_atual >= data_inicio:
                 consumo_total_periodo += consumo_litros
@@ -1970,7 +2086,8 @@ def exportar_graficos_lote_pdf(request, lote_id):
                 consumo_por_dia[dia] = consumo_por_dia.get(dia, 0.0) + consumo_litros
 
             if data_leitura_atual >= data_inicio_grafico_mensal:
-                mes_key = (leitura_atual.data_leitura.year, leitura_atual.data_leitura.month)
+                data_local = _data_leitura_local(leitura_atual)
+                mes_key = (data_local.year, data_local.month)
                 consumo_por_mes[mes_key] = consumo_por_mes.get(mes_key, 0.0) + consumo_litros
 
     datas_periodo = []
@@ -2198,7 +2315,7 @@ def exportar_graficos_lote_pdf(request, lote_id):
         max_fotos = 40
         leituras_com_foto = [
             leitura for leitura in leituras_periodo
-            if data_inicio <= leitura.data_leitura.date() <= data_fim and leitura.foto
+            if data_inicio <= timezone.localtime(leitura.data_leitura).date() <= data_fim and leitura.foto
         ][:max_fotos] if incluir_fotos else []
 
         if leituras_com_foto:
@@ -2206,54 +2323,16 @@ def exportar_graficos_lote_pdf(request, lote_id):
             elements.append(Paragraph("📷 Fotos das Leituras", heading_style))
             for leitura in leituras_com_foto:
                 try:
-                    if not leitura.foto:
-                        continue
-
-                    foto_source = None
-
-                    # Prioriza stream do storage (funciona com storage remoto e local).
-                    try:
-                        leitura.foto.open('rb')
-                        conteudo = leitura.foto.read()
-                        if conteudo:
-                            foto_buffer = io.BytesIO(conteudo)
-                            buffers_fotos_pdf.append(foto_buffer)
-                            foto_source = foto_buffer
-                    except Exception:
-                        foto_source = None
-                    finally:
-                        try:
-                            leitura.foto.close()
-                        except Exception:
-                            pass
-
-                    # Fallback para caminho de arquivo local quando disponível.
-                    if foto_source is None:
-                        foto_path = None
-                        if hasattr(leitura.foto, 'path'):
-                            foto_path = leitura.foto.path
-                            if not os.path.isabs(foto_path):
-                                foto_path = os.path.join(settings.MEDIA_ROOT, foto_path)
-                        elif hasattr(leitura.foto, 'file'):
-                            foto_file = leitura.foto.file.name
-                            if not os.path.isabs(foto_file):
-                                foto_path = os.path.join(settings.MEDIA_ROOT, foto_file)
-                            else:
-                                foto_path = foto_file
-
-                        if foto_path and os.path.exists(foto_path):
-                            foto_source = foto_path
-                        else:
-                            alt_path = os.path.join(settings.MEDIA_ROOT, str(leitura.foto))
-                            if os.path.exists(alt_path):
-                                foto_source = alt_path
-
+                    foto_source = _resolver_foto_para_pdf(leitura)
                     if foto_source is None:
                         continue
+
+                    if isinstance(foto_source, io.BytesIO):
+                        buffers_fotos_pdf.append(foto_source)
 
                     legenda = (
                         f"Hidrômetro {leitura.hidrometro.numero} - "
-                        f"{leitura.data_leitura.strftime('%d/%m/%Y %H:%M')}"
+                        f"{timezone.localtime(leitura.data_leitura).strftime('%d/%m/%Y %H:%M')}"
                     )
                     elements.append(Paragraph(legenda, styles['Normal']))
                     elements.append(Spacer(1, 0.1*inch))

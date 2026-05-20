@@ -31,6 +31,7 @@ urlpatterns = [
     path('lotes/<int:lote_id>/graficos/', views.graficos_lote, name='graficos_lote'),
     path('leituras/', views.listar_leituras, name='listar_leituras'),
     path('leituras/<int:leitura_id>/foto/', views.visualizar_foto_leitura, name='visualizar_foto_leitura'),
+    path('jobs/leituras/<int:leitura_id>/foto/', views.baixar_foto_leitura_job, name='baixar_foto_leitura_job'),
     path('registrar-leitura/', views.registrar_leitura, name='registrar_leitura'),
     path('graficos/', views.graficos_consumo, name='graficos_consumo'),
     path('jobs/pregerar-relatorios/', views.pregerar_relatorios_job, name='pregerar_relatorios_job'),

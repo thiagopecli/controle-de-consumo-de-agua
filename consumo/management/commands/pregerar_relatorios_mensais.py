@@ -4,6 +4,7 @@ import time
 from datetime import datetime
 from io import BytesIO
 
+from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 from django.db.models import Exists, OuterRef
@@ -155,6 +156,18 @@ class Command(BaseCommand):
                     f"Continuando com --permitir-lotes-incompletos."
                 )
             )
+
+        self.stdout.write("Sincronizando fotos anexadas antes de gerar os PDFs...")
+        try:
+            call_command(
+                'sincronizar_fotos_leituras',
+                data_coleta=data_coleta.strftime('%Y-%m-%d'),
+                base_url=base_url,
+                stdout=self.stdout,
+                stderr=self.stderr,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise CommandError(f"Falha ao sincronizar fotos anexadas: {exc}") from exc
 
         total_lotes = lotes.count()
         for indice, lote in enumerate(lotes, start=1):
