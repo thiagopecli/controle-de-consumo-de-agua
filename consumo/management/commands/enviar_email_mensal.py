@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -7,7 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.core.validators import EmailValidator
 from django.utils import timezone
 
-from consumo.models import Lote
+from consumo.models import Leitura, Lote
 from consumo.services.relatorios_cache import (
     calcular_data_coleta,
     caminho_pdf_lote,
@@ -77,9 +78,11 @@ class Command(BaseCommand):
                 with open(caminho_pdf, 'rb') as arquivo_pdf:
                     conteudo_pdf = arquivo_pdf.read()
 
+                consumo_litros = self._calcular_consumo_lote_litros(lote, data_inicio, data_fim)
+
                 mensagem = EmailMessage(
-                    subject=self._assunto_email(lote.numero, data_inicio, data_fim),
-                    body=self._corpo_email(lote, data_inicio, data_fim),
+                    subject=self._assunto_email(lote.numero),
+                    body=self._corpo_email(lote, data_inicio, data_fim, consumo_litros),
                     from_email=settings.DEFAULT_FROM_EMAIL,
                     to=destinatarios,
                 )
@@ -129,19 +132,61 @@ class Command(BaseCommand):
 
         return list(dict.fromkeys(destinos))
 
-    def _assunto_email(self, lote_numero, data_inicio, data_fim):
+    def _assunto_email(self, lote_numero):
+        return f'Resumo mensal de consumo de água do Lote {lote_numero}'
+
+    def _corpo_email(self, lote, data_inicio, data_fim, consumo_litros):
+        consumo_formatado = self._formatar_litros(consumo_litros)
         return (
-            f'Relatorio mensal de agua - Lote {lote_numero} - '
-            f'{data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}'
+            f'Olá! Segue o resumo mensal de consumo de água do Lote {lote.numero}.\n\n'
+            f'📅 Período: {data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}\n'
+            f'📊 Consumo no Período: {consumo_formatado} litros\n'
+            '‼️Limite Mensal: 15.000 litros, valores excedentes sujeitos a cobrança.\n\n'
+            '⚠️ Esta é uma mensagem automática. Em caso de dúvidas, por favor, entre em contato diretamente com a administração.\n\n'
+            'Atenciosamente,\n'
+            'Condomínio Residencial Pedra de Inoã'
         )
 
-    def _corpo_email(self, lote, data_inicio, data_fim):
-        proprietario = (lote.proprietario_nome or '').strip()
-        saudacao = f'Prezado(a) {proprietario},' if proprietario else 'Prezado(a),'
-        return (
-            f'{saudacao}\n\n'
-            'Segue em anexo o relatorio mensal de consumo de agua referente ao periodo '
-            f'{data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}.\n\n'
-            'Atenciosamente,\n'
-            'Administracao'
-        )
+    def _formatar_litros(self, valor):
+        try:
+            inteiro = int(float(valor))
+        except (TypeError, ValueError):
+            inteiro = 0
+        return f'{inteiro:,}'.replace(',', '.')
+
+    def _data_leitura_local(self, leitura):
+        return timezone.localtime(leitura.data_leitura)
+
+    def _calcular_consumo_lote_litros(self, lote, data_inicio, data_fim):
+        consumo_total_m3 = Decimal('0')
+        for hidrometro in lote.hidrometros.filter(ativo=True).only('id'):
+            leitura_anterior_periodo = Leitura.objects.filter(
+                hidrometro=hidrometro,
+                data_leitura__date__lt=data_inicio,
+            ).order_by('-data_leitura').first()
+
+            leituras_periodo = list(
+                Leitura.objects.filter(
+                    hidrometro=hidrometro,
+                    data_leitura__date__gte=data_inicio,
+                    data_leitura__date__lte=data_fim,
+                ).order_by('data_leitura')
+            )
+
+            if leitura_anterior_periodo:
+                leituras_para_calculo = [leitura_anterior_periodo] + leituras_periodo
+            else:
+                leituras_para_calculo = leituras_periodo
+
+            for indice in range(1, len(leituras_para_calculo)):
+                leitura_atual = leituras_para_calculo[indice]
+                leitura_anterior = leituras_para_calculo[indice - 1]
+
+                if self._data_leitura_local(leitura_atual).date() < data_inicio:
+                    continue
+
+                delta = leitura_atual.leitura - leitura_anterior.leitura
+                if delta > 0:
+                    consumo_total_m3 += delta
+
+        return int(consumo_total_m3 * Decimal('1000'))
