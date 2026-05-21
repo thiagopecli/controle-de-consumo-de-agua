@@ -1,5 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
+import json
+from pathlib import Path
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -23,6 +25,11 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--data-referencia', default=None, help='Data no formato YYYY-MM-DD (padrao: hoje)')
         parser.add_argument('--dry-run', action='store_true', help='Apenas simula o envio')
+        parser.add_argument(
+            '--reiniciar-progresso',
+            action='store_true',
+            help='Ignora o estado anterior e reenvia todos os lotes com email cadastrado',
+        )
 
     def handle(self, *args, **options):
         if settings.EMAIL_BACKEND.endswith('smtp.EmailBackend'):
@@ -35,6 +42,11 @@ class Command(BaseCommand):
         data_coleta = calcular_data_coleta(data_referencia)
         data_inicio, data_fim = intervalo_mensal_da_coleta(data_coleta)
         pasta_cache = pasta_relatorios_coleta(data_coleta)
+        estado_envio = self._carregar_estado_envio(pasta_cache, data_coleta)
+
+        if options.get('reiniciar_progresso'):
+            estado_envio = self._estado_envio_vazio(data_coleta)
+            self._salvar_estado_envio(pasta_cache, estado_envio)
 
         if not pasta_cache.exists():
             raise CommandError(f'Pasta de relatorios nao encontrada: {pasta_cache}')
@@ -53,8 +65,18 @@ class Command(BaseCommand):
             f'periodo={data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")} | '
             f'pasta={pasta_cache}'
         )
+        if estado_envio.get('enviados'):
+            self.stdout.write(
+                self.style.WARNING(
+                    f"[AVISO] Progresso anterior encontrado: {len(estado_envio['enviados'])} lote(s) ja enviados serao ignorados nesta execucao."
+                )
+            )
 
         for lote in lotes:
+            if lote.numero in estado_envio.get('enviados', []):
+                self.stdout.write(self.style.WARNING(f'Lote {lote.numero}: ja enviado anteriormente, pulando.'))
+                continue
+
             destinatarios = self._destinos_lote(lote)
             if not destinatarios:
                 pulados_sem_email += 1
@@ -92,9 +114,13 @@ class Command(BaseCommand):
                     raise RuntimeError('EmailMessage.send retornou zero mensagens entregues.')
 
                 enviados += 1
+                estado_envio['enviados'].append(lote.numero)
+                self._salvar_estado_envio(pasta_cache, estado_envio)
                 self.stdout.write(self.style.SUCCESS(f'[OK] Lote {lote.numero} enviado para {", ".join(destinatarios)}'))
             except Exception as exc:  # noqa: BLE001
                 erros += 1
+                estado_envio['erros'][lote.numero] = str(exc)
+                self._salvar_estado_envio(pasta_cache, estado_envio)
                 self.stdout.write(self.style.ERROR(f'[ERRO] Lote {lote.numero}: {exc}'))
 
         self.stdout.write(
@@ -153,6 +179,42 @@ class Command(BaseCommand):
         except (TypeError, ValueError):
             inteiro = 0
         return f'{inteiro:,}'.replace(',', '.')
+
+    def _estado_envio_path(self, pasta_cache):
+        return Path(pasta_cache) / 'envio_email_mensal_estado.json'
+
+    def _estado_envio_vazio(self, data_coleta):
+        return {
+            'data_coleta': str(data_coleta),
+            'enviados': [],
+            'erros': {},
+        }
+
+    def _carregar_estado_envio(self, pasta_cache, data_coleta):
+        caminho_estado = self._estado_envio_path(pasta_cache)
+        estado_padrao = self._estado_envio_vazio(data_coleta)
+        if not caminho_estado.exists():
+            return estado_padrao
+
+        try:
+            with open(caminho_estado, 'r', encoding='utf-8') as arquivo:
+                estado = json.load(arquivo)
+        except (OSError, json.JSONDecodeError):
+            return estado_padrao
+
+        if str(estado.get('data_coleta')) != str(data_coleta):
+            return estado_padrao
+
+        estado.setdefault('enviados', [])
+        estado.setdefault('erros', {})
+        return estado
+
+    def _salvar_estado_envio(self, pasta_cache, estado_envio):
+        caminho_estado = self._estado_envio_path(pasta_cache)
+        tmp_caminho = caminho_estado.with_suffix('.tmp')
+        with open(tmp_caminho, 'w', encoding='utf-8') as arquivo:
+            json.dump(estado_envio, arquivo, ensure_ascii=False, indent=2)
+        tmp_caminho.replace(caminho_estado)
 
     def _data_leitura_local(self, leitura):
         return timezone.localtime(leitura.data_leitura)
