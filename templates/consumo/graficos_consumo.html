@@ -542,9 +542,28 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
+// Função auxiliar para mudar o visual da opção baixada
+function marcarComoBaixado(faixaValue) {
+    const select = document.getElementById('select-faixa-lotes');
+    const option = select.querySelector(`option[value="${faixaValue}"]`);
+    
+    if (option && !option.text.includes('✅')) {
+        option.text = option.text.replace('📦', '✅') + ' (Baixado)';
+        option.style.backgroundColor = '#d1e7dd'; 
+        option.style.color = '#0f5132'; 
+    }
+}
+
 // Modal de Relatórios
 function abrirModalRelatorios() {
     document.getElementById('modal-relatorios').style.display = 'flex';
+    
+    // Ao abrir o modal, verifica no navegador quais blocos já foram baixados
+    const urlParams = new URLSearchParams(window.location.search);
+    const chaveUnica = 'downloads_' + (urlParams.get('periodo') || 'atual') + '_' + (urlParams.get('data_inicio') || '') + '_' + (urlParams.get('data_fim') || '');
+    const baixados = JSON.parse(sessionStorage.getItem(chaveUnica) || '[]');
+    
+    baixados.forEach(faixa => marcarComoBaixado(faixa));
 }
 
 function fecharModalRelatorios() {
@@ -565,12 +584,23 @@ function baixarRelatoriosFaixa() {
         urlParams.delete('lote_fim');
     }
     
-    // Construir URL e redirecionar
+    // Construir URL e disparar download
     const url = '{% url "consumo:baixar_relatorios_lotes_periodo_zip" %}?' + urlParams.toString();
     window.location.href = url;
     
-    // Fechar modal após um pequeno delay
-    setTimeout(() => fecharModalRelatorios(), 500);
+    // Salvar o registro do download na memória do navegador
+    const chaveUnica = 'downloads_' + (urlParams.get('periodo') || 'atual') + '_' + (urlParams.get('data_inicio') || '') + '_' + (urlParams.get('data_fim') || '');
+    let baixados = JSON.parse(sessionStorage.getItem(chaveUnica) || '[]');
+    if (!baixados.includes(faixa)) {
+        baixados.push(faixa);
+        sessionStorage.setItem(chaveUnica, JSON.stringify(baixados));
+    }
+    
+    // Atualiza a cor e o ícone instantaneamente na tela
+    marcarComoBaixado(faixa);
+    
+    // Fechar modal após delay
+    setTimeout(() => fecharModalRelatorios(), 800);
 }
 
 // Fechar modal ao clicar fora
@@ -619,7 +649,7 @@ window.onclick = function(event) {
         </div>
         
         <p style="color: #666; margin-bottom: 1.5rem; line-height: 1.6;">
-            <strong>⏱️ Importante:</strong> Para evitar timeout, os 310 lotes estão divididos em faixas de 50 lotes. 
+            <strong>⏱️ Importante:</strong> Para evitar timeout, os 310 lotes estão divididos em faixas de 20 lotes. 
             O sistema prioriza os relatórios já salvos no servidor e só gera novo PDF quando o arquivo não existe. Selecione a faixa desejada para download:
         </p>
         
