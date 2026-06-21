@@ -113,7 +113,7 @@ services:
     # Render usa UTC: 11:00 UTC = 08:00 no horário de Brasília
     schedule: "0 11 19 * *"
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "python manage.py precheck_envio_email_mensal --modo-estrito"
+    startCommand: "python manage.py precheck_envio_email_mensal"
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.2
