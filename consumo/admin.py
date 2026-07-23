@@ -99,7 +99,6 @@ class LoteForm(forms.ModelForm):
                 raise ValidationError('Email inválido. Verifique o formato.')
         return email
 
-
 @admin.register(Lote)
 class LoteAdmin(admin.ModelAdmin):
     form = LoteForm
@@ -107,7 +106,25 @@ class LoteAdmin(admin.ModelAdmin):
     list_filter = ['tipo', 'ativo']
     search_fields = ['numero', 'proprietario_nome', 'telefone_whatsapp', 'telefone_whatsapp_2', 'email_proprietario', 'email_proprietario_2', 'endereco']
     ordering = ['numero_sequencia', 'numero']
+    
+    # 1. Registramos as ações para aparecerem na caixinha
+    actions = ['ativar_hidrometros', 'desativar_hidrometros']
 
+    # 2. Criamos a função de ativar
+    @admin.action(description='Ativar hidrômetros dos lotes selecionados')
+    def ativar_hidrometros(self, request, queryset):
+        lotes_ids = queryset.values_list('id', flat=True)
+        # Filtra os hidrômetros ligados a esses lotes e muda o ativo para True
+        total_atualizados = Hidrometro.objects.filter(lote_id__in=lotes_ids).update(ativo=True)
+        self.message_user(request, f'Sucesso! {total_atualizados} hidrômetro(s) ativado(s).')
+
+    # 3. Criamos a função de desativar
+    @admin.action(description='Desativar hidrômetros dos lotes selecionados')
+    def desativar_hidrometros(self, request, queryset):
+        lotes_ids = queryset.values_list('id', flat=True)
+        # Filtra os hidrômetros ligados a esses lotes e muda o ativo para False
+        total_atualizados = Hidrometro.objects.filter(lote_id__in=lotes_ids).update(ativo=False)
+        self.message_user(request, f'Sucesso! {total_atualizados} hidrômetro(s) desativado(s).')
 
 @admin.register(Hidrometro)
 class HidrometroAdmin(admin.ModelAdmin):
@@ -161,4 +178,3 @@ class UsuarioPerfilAdmin(admin.ModelAdmin):
         queryset = queryset.exclude(user__is_superuser=True)
         atualizados = queryset.update(situacao_acesso='recusado')
         self.message_user(request, f'{atualizados} usuario(s) recusado(s).')
-
