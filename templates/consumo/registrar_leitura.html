@@ -24,8 +24,7 @@
             <div class="form-row">
                 <div class="form-group">
                     <label for="leitura">Leitura (m³) *</label>
-                    <input type="text" pattern="[0-9]*" inputmode="numeric" name="leitura" class="form-control"
-                           required placeholder="0,000" maxlength="9">
+                    <input type="text" id="leitura" inputmode="decimal" name="leitura" class="form-control" required placeholder="0,000" maxlength="9">
                 </div>
             </div>
 
@@ -546,6 +545,9 @@ function resetarFormularioLeitura() {
 
 function configurarFormatacaoCampoLeitura() {
     const leituraInput = document.getElementById('leitura');
+
+    // 👇 ADICIONE ESTA LINHA AQUI (Trava de segurança) 👇
+    if (!leituraInput) return;
 
     leituraInput.addEventListener('input', function() {
         let valor = this.value;

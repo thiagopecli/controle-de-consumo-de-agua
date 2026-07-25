@@ -27,7 +27,6 @@ urlpatterns = [
     path('', views.inicio, name='inicio'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('hidrometros/', views.listar_hidrometros, name='listar_hidrometros'),
-    path('hidrometros/<int:hidrometro_id>/', views.detalhes_hidrometro, name='detalhes_hidrometro'),
     path('lotes/<int:lote_id>/graficos/', views.graficos_lote, name='graficos_lote'),
     path('leituras/', views.listar_leituras, name='listar_leituras'),
     path('leituras/<int:leitura_id>/foto/', views.visualizar_foto_leitura, name='visualizar_foto_leitura'),

@@ -2,15 +2,19 @@
 {% load static %}
 {% load filtros_personalizados %}
 
-{% block title %}Gráficos - Lote {{ lote.numero }} - Sistema de Controle de Água{% endblock %}
+{% block title %}Painel Geral - Lote {{ lote.numero }} - Sistema de Controle de Água{% endblock %}
 
 {% block content %}
 <div class="graficos-lote-page">
+    
+    <!-- ==========================================
+         CABEÇALHO UNIFICADO
+    =========================================== -->
     <div class="page-header">
         <div>
-            <h2>📊 Gráficos de Consumo - Lote {{ lote.numero }}</h2>
+            <h2>📊 Painel de Consumo e Detalhes - Lote {{ lote.numero }}</h2>
             <p style="color: var(--secondary-color); margin-top: 0.5rem;" id="periodo-label">
-                Tipo: <span class="badge badge-{{ lote.tipo }}">{{ lote.get_tipo_display }}</span>
+                Tipo: <span class="badge badge-{{ lote.tipo }}">{{ lote.get_tipo_display }}</span> | Detalhes, gráficos e histórico de leituras
             </p>
         </div>
         <div class="page-actions">
@@ -23,14 +27,93 @@
         </div>
     </div>
 
-    <!-- Filtro de Período -->
+    {% if sem_dados %}
+    <div class="info-box" style="text-align: center; padding: 3rem;">
+        <p style="font-size: 1.2rem; color: var(--secondary-color); margin-bottom: 1rem;">
+            📭 Nenhum hidrômetro ativo encontrado para este lote.
+        </p>
+        <p>
+            <a href="{% url 'consumo:registrar_leitura' %}" class="btn btn-primary">
+                📝 Registrar Leitura
+            </a>
+        </p>
+    </div>
+    {% else %}
+
+    <!-- ==========================================
+         1. DETALHES DOS HIDRÔMETROS (Mantendo 100% da antiga tela de detalhes)
+    =========================================== -->
+    <h3 style="color: var(--dark-text); margin-bottom: 1.5rem;">💧 Informações dos Hidrômetros Instalados</h3>
+    
+    {% for hidrometro in hidrometros %}
+    <div class="info-box" style="margin-bottom: 2rem; border-left: 4px solid var(--primary-color);">
+        <h4 style="margin-bottom: 1rem; color: var(--dark-text); border-bottom: 1px solid #eee; padding-bottom: 0.5rem;">
+            Registro Nº: {{ hidrometro.numero }}
+        </h4>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">🔧</div>
+                <div class="stat-info">
+                    <h3>Hidrômetro</h3>
+                    <p class="stat-value" style="font-size: 1.3rem;">{{ hidrometro.numero }}</p>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">🏠</div>
+                <div class="stat-info">
+                    <h3>Lote</h3>
+                    <p class="stat-value" style="font-size: 1.3rem;">{{ lote.numero }}</p>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">
+                    {% if lote.tipo == 'residencial' %}🏡{% else %}🏢{% endif %}
+                </div>
+                <div class="stat-info">
+                    <h3>Tipo</h3>
+                    <p class="stat-value" style="font-size: 1rem;">
+                        <span class="badge badge-{{ lote.tipo }}" style="font-size: 0.9rem;">
+                            {{ lote.get_tipo_display }}
+                        </span>
+                    </p>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">📅</div>
+                <div class="stat-info">
+                    <h3>Instalação</h3>
+                    <p class="stat-value" style="font-size: 1.1rem;">{{ hidrometro.data_instalacao|date:"d/m/Y" }}</p>
+                </div>
+            </div>
+        </div>
+        
+        {% if hidrometro.localizacao %}
+        <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 2px solid var(--border-color);">
+            <p><strong>📍 Localização:</strong> {{ hidrometro.localizacao }}</p>
+        </div>
+        {% endif %}
+        
+        {% if hidrometro.observacoes %}
+        <div style="margin-top: 1rem;">
+            <p><strong>📝 Observações:</strong> {{ hidrometro.observacoes }}</p>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    <!-- ==========================================
+         2. FILTRO DE PERÍODO
+    =========================================== -->
     <div style="background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 2rem;">
         <h3 style="color: var(--dark-text); margin-bottom: 1rem; font-size: 1.1rem;">
             🔍 Filtrar Período
         </h3>
         <form method="GET" action="{% url 'consumo:graficos_lote' lote.id %}" id="filtro-periodo-form">
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: end;">
-                <!-- Seleção de Período Pré-definido -->
                 <div>
                     <label for="periodo" style="display: block; margin-bottom: 0.5rem; color: var(--dark-text); font-weight: 500;">
                         Período:
@@ -41,7 +124,6 @@
                     </select>
                 </div>
 
-                <!-- Campos para Período Personalizado -->
                 <div id="periodo-personalizado-fields" style="display: none; grid-column: span 2; display: grid; grid-template-columns: 1fr 1fr auto; gap: 1rem; align-items: end;">
                     <div>
                         <label for="data_inicio" style="display: block; margin-bottom: 0.5rem; color: var(--dark-text); font-weight: 500;">
@@ -61,7 +143,6 @@
                     </div>
                 </div>
 
-                <!-- Botão Filtrar -->
                 <div>
                     <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.75rem;">
                         🔍 Filtrar
@@ -71,35 +152,25 @@
         </form>
     </div>
 
-    <!-- Card de Resumo -->
+    <!-- ==========================================
+         3. RESUMO DE CONSUMO
+    =========================================== -->
     <div class="stats-grid" style="margin-bottom: 3rem;">
         <div class="stat-card">
             <div class="stat-icon">📈</div>
             <div class="stat-info">
-                <h3>Consumo Total</h3>
+                <h3>Consumo Total Agregado</h3>
                 <p class="stat-value" id="consumo-total-display">Carregando...</p>
                 <p style="font-size: 0.75rem; color: var(--secondary-color); margin-top: 0.25rem;" id="periodo-resumo">-</p>
             </div>
         </div>
     </div>
 
-    {% if sem_dados %}
-    <div class="info-box" style="text-align: center; padding: 3rem;">
-        <p style="font-size: 1.2rem; color: var(--secondary-color); margin-bottom: 1rem;">
-            📭 Nenhum hidrômetro ativo encontrado para este lote.
-        </p>
-        <p>
-            <a href="{% url 'consumo:registrar_leitura' %}" class="btn btn-primary">
-                📝 Registrar Leitura
-            </a>
-        </p>
-    </div>
-    {% else %}
-
-    <!-- Container dos Gráficos -->
+    <!-- ==========================================
+         4. GRÁFICOS DO LOTE
+    =========================================== -->
     <div class="charts-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(700px, 1fr)); gap: 2rem; margin-bottom: 3rem;">
         
-        <!-- Gráfico 1: Consumo por Dia -->
         <div class="chart-container" style="padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: white;">
             <h3 style="color: var(--dark-text); margin-bottom: 1.5rem; font-size: 1.2rem;">
                 📅 Consumo por Dia do Mês (Litros)
@@ -110,7 +181,6 @@
             </p>
         </div>
 
-        <!-- Gráfico 2: Consumo por Mês do Ano -->
         <div class="chart-container" style="padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: white;">
             <h3 style="color: var(--dark-text); margin-bottom: 1.5rem; font-size: 1.2rem;">
                 📊 Consumo por Mês do Ano (Litros)
@@ -122,61 +192,84 @@
         </div>
     </div>
 
-
-    <!-- Tabela de Dados Detalhados -->
-    <div style="margin-bottom: 3rem;">
-        <h3 style="color: var(--dark-text); margin-bottom: 1.5rem;">📋 Detalhes do Consumo</h3>
-        
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
-            <!-- Tabela de Hidrômetros -->
-            <div>
-                <h4 style="color: var(--dark-text); margin-bottom: 1rem; font-size: 1rem;">
-                    💧 Hidrômetros do Lote
-                </h4>
-                <div class="table-container">
-                    <table class="data-table" style="font-size: 0.95rem;">
-                        <thead>
-                            <tr>
-                                <th>Número</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for hidrometro in hidrometros %}
-                            <tr>
-                                <td><strong>{{ hidrometro.numero }}</strong></td>
-                                <td>
-                                    <a href="{% url 'consumo:detalhes_hidrometro' hidrometro.id %}" class="btn btn-sm btn-info">
-                                        Ver Detalhes
-                                    </a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            
-        </div>
+    <!-- ==========================================
+         5. HISTÓRICO DE LEITURAS DETALHADO
+    =========================================== -->
+    <div style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <h3 style="color: var(--dark-text); margin: 0;">📋 Histórico de Leituras (últimas 50)</h3>
+        <a href="{% url 'consumo:registrar_leitura' %}?lote={{ lote.id }}" class="btn btn-primary">
+            📝 Registrar Nova Leitura
+        </a>
     </div>
-
+    
+    {% if leituras %}
+    <div class="table-container" style="margin-bottom: 3rem;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Data/Hora</th>
+                    <th>Hidrômetro</th>
+                    <th>Leitura (m³)</th>
+                    <th>Consumo (Litros)</th>
+                    <th>Responsável</th>
+                    <th>Foto</th>
+                    <th>Observações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for leitura in leituras %}
+                <tr>
+                    <td><strong>{{ leitura.data_leitura|date:"d/m/Y H:i" }}</strong></td>
+                    <td>Nº {{ leitura.hidrometro.numero }}</td>
+                    <td><strong>{{ leitura.leitura }}</strong></td>
+                    <td>
+                        {% if leitura.consumo_desde_ultima_leitura_litros > 0 %}
+                        <span style="color: #0891b2; font-weight: 700;">
+                            {{ leitura.consumo_desde_ultima_leitura_litros|floatformat:0|formatar_litros }} L
+                        </span>
+                        {% else %}
+                        <span style="color: #94a3b8; font-weight: 700;">0 L</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ leitura.responsavel|default:"N/A" }}</td>
+                    <td>
+                        {% if leitura.foto %}
+                        <a href="{{ leitura.foto.url }}" target="_blank" class="btn btn-sm btn-info">
+                            📷 Ver
+                        </a>
+                        {% else %}
+                        <span style="color: #94a3b8;">—</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ leitura.observacoes|default:"—"|truncatewords:5 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="info-box" style="margin-bottom: 3rem;">
+        <p style="text-align: center; color: var(--secondary-color); padding: 2rem;">
+            📭 Nenhuma leitura registrada ainda para os hidrômetros deste lote.
+        </p>
+    </div>
     {% endif %}
+
+    {% endif %} <!-- Fim do if sem_dados -->
 </div>
 
-<!-- Script Chart.js -->
+<!-- ==========================================
+     SCRIPTS E ESTILOS
+=========================================== -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Dados dos gráficos
     const dadosGraficos = JSON.parse('{{ dados_graficos|escapejs }}');
     
-    // Atualizar labels dinâmicos
     document.getElementById('periodo-label').innerHTML = `Tipo: <span class="badge badge-{{ lote.tipo }}">{{ lote.get_tipo_display }}</span> | Período: <strong>${dadosGraficos.periodo_label}</strong>`;
     document.getElementById('periodo-resumo').textContent = dadosGraficos.periodo_label;
     
-    // Formatar e exibir consumo total
     const consumoTotal = dadosGraficos.consumo_total_periodo;
     const consumoFormatado = consumoTotal >= 1000 
         ? (consumoTotal / 1000).toFixed(1).replace('.', ',') + ' mil' 
@@ -187,11 +280,9 @@ document.addEventListener('DOMContentLoaded', function() {
         : 'Visualização mensal do consumo ao longo do período';
     document.getElementById('total-mes-descricao').textContent = descricaoMensal;
     
-    // Selecionar período correto no dropdown
     const periodoSelect = document.getElementById('periodo');
     periodoSelect.value = dadosGraficos.periodo_selecionado;
 
-    // Cores customizadas
     const cores = {
         azul: 'rgba(8, 145, 178, 1)',
         laranja: 'rgba(234, 88, 12, 1)',
@@ -200,7 +291,7 @@ document.addEventListener('DOMContentLoaded', function() {
         roxo: 'rgba(168, 85, 247, 1)',
     };
 
-    // ============ GRÁFICO 1: CONSUMO POR DIA DO MÊS ============
+    // Gráfico 1: Dia
     const ctxDia = document.getElementById('chartConsumoPorDia');
     if (ctxDia && dadosGraficos.consumo_por_dia.length > 0) {
         const diasLabels = dadosGraficos.consumo_por_dia.map(d => `Dia ${d.dia}`);
@@ -226,51 +317,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 responsive: true,
                 maintainAspectRatio: true,
                 plugins: {
-                    legend: {
-                        display: true,
-                        position: 'top',
-                        labels: {
-                            font: { size: 12 },
-                            padding: 15,
-                        }
-                    },
+                    legend: { display: true, position: 'top', labels: { font: { size: 12 }, padding: 15 } },
                     tooltip: {
-                        backgroundColor: 'rgba(0,0,0,0.7)',
-                        padding: 12,
-                        titleFont: { size: 13 },
-                        bodyFont: { size: 12 },
+                        backgroundColor: 'rgba(0,0,0,0.7)', padding: 12, titleFont: { size: 13 }, bodyFont: { size: 12 },
                         callbacks: {
-                            label: function(context) {
-                                return `${context.parsed.y.toLocaleString('pt-BR', {maximumFractionDigits: 0})} L`;
-                            }
+                            label: function(context) { return `${context.parsed.y.toLocaleString('pt-BR', {maximumFractionDigits: 0})} L`; }
                         }
                     }
                 },
                 scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            callback: function(value) {
-                                return value.toLocaleString('pt-BR') + ' L';
-                            },
-                            font: { size: 11 }
-                        },
-                        title: {
-                            display: true,
-                            text: 'Litros'
-                        }
-                    },
-                    x: {
-                        ticks: {
-                            font: { size: 10 }
-                        }
-                    }
+                    y: { beginAtZero: true, ticks: { callback: function(value) { return value.toLocaleString('pt-BR') + ' L'; }, font: { size: 11 } }, title: { display: true, text: 'Litros' } },
+                    x: { ticks: { font: { size: 10 } } }
                 }
             }
         });
     }
 
-    // ============ GRÁFICO 2: CONSUMO POR MÊS DO ANO ============
+    // Gráfico 2: Mês
     const ctxMes = document.getElementById('chartConsumoMes');
     if (ctxMes && dadosGraficos.consumo_mes.length > 0) {
         const diasMesLabels = dadosGraficos.consumo_mes.map(d => d.mes_nome || `Mês ${d.mes}`);
@@ -296,53 +359,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 responsive: true,
                 maintainAspectRatio: true,
                 plugins: {
-                    legend: {
-                        display: true,
-                        position: 'top',
-                        labels: {
-                            font: { size: 12 },
-                            padding: 15,
-                        }
-                    },
+                    legend: { display: true, position: 'top', labels: { font: { size: 12 }, padding: 15 } },
                     tooltip: {
-                        backgroundColor: 'rgba(0,0,0,0.7)',
-                        padding: 12,
-                        titleFont: { size: 13 },
-                        bodyFont: { size: 12 },
+                        backgroundColor: 'rgba(0,0,0,0.7)', padding: 12, titleFont: { size: 13 }, bodyFont: { size: 12 },
                         callbacks: {
-                            label: function(context) {
-                                return `${context.parsed.y.toLocaleString('pt-BR', {maximumFractionDigits: 0})} L`;
-                            }
+                            label: function(context) { return `${context.parsed.y.toLocaleString('pt-BR', {maximumFractionDigits: 0})} L`; }
                         }
                     }
                 },
                 scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            callback: function(value) {
-                                return value.toLocaleString('pt-BR') + ' L';
-                            },
-                            font: { size: 11 }
-                        },
-                        title: {
-                            display: true,
-                            text: 'Litros por Mês'
-                        }
-                    },
-                    x: {
-                        ticks: {
-                            font: { size: 10 }
-                        }
-                    }
+                    y: { beginAtZero: true, ticks: { callback: function(value) { return value.toLocaleString('pt-BR') + ' L'; }, font: { size: 11 } }, title: { display: true, text: 'Litros por Mês' } },
+                    x: { ticks: { font: { size: 10 } } }
                 }
             }
         });
     }
 
-    // ============ CONTROLE DO PERÍODO PERSONALIZADO ============
     const camposPersonalizados = document.getElementById('periodo-personalizado-fields');
-    
     function toggleCamposPersonalizados() {
         if (periodoSelect.value === 'personalizado') {
             camposPersonalizados.style.display = 'grid';
@@ -353,7 +386,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     periodoSelect.addEventListener('change', toggleCamposPersonalizados);
     toggleCamposPersonalizados();
-
 });
 </script>
 
@@ -363,33 +395,16 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 @keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-.charts-container {
-    width: 100%;
-}
-
-.chart-container {
-    background: white;
-    transition: box-shadow 0.3s ease;
-}
-
-.chart-container:hover {
-    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-}
+.charts-container { width: 100%; }
+.chart-container { background: white; transition: box-shadow 0.3s ease; }
+.chart-container:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
 
 @media (max-width: 768px) {
-    .charts-container {
-        grid-template-columns: 1fr !important;
-    }
+    .charts-container { grid-template-columns: 1fr !important; }
 }
 </style>
 

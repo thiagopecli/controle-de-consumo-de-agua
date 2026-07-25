@@ -884,156 +884,6 @@ def registrar_leitura(request):
     
     return render(request, 'consumo/registrar_leitura.html', context)
 
-
-@admin_required
-def detalhes_hidrometro(request, hidrometro_id):
-    """Página com detalhes e histórico de leituras do hidrômetro com filtros e gráficos"""
-    from datetime import timedelta
-    from django.db.models import Sum
-    from collections import defaultdict
-    import calendar
-    
-    hidrometro = get_object_or_404(Hidrometro, id=hidrometro_id)
-    
-    # Obter filtros de período
-    periodo = request.GET.get('periodo', 'ano_atual')
-    data_inicio_str = request.GET.get('data_inicio', '')
-    data_fim_str = request.GET.get('data_fim', '')
-    
-    hoje = timezone.localdate()
-    data_inicio = None
-    data_fim = hoje
-    periodo_label = ''
-    
-    # Definir período baseado no filtro
-    if periodo == 'ano_atual':
-        data_inicio = hoje.replace(month=1, day=1)
-        periodo_label = f'Ano de {hoje.year}'
-    elif periodo == 'personalizado' and data_inicio_str and data_fim_str:
-        try:
-            from datetime import datetime
-            data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
-            data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
-            periodo_label = f'{data_inicio.strftime("%d/%m/%Y")} a {data_fim.strftime("%d/%m/%Y")}'
-        except:
-            data_inicio = hoje.replace(month=1, day=1)
-            data_fim = hoje
-            periodo_label = f'Ano de {hoje.year}'
-            periodo = 'ano_atual'
-    else:
-        data_inicio = hoje.replace(month=1, day=1)
-        periodo_label = f'Ano de {hoje.year}'
-    
-# Buscar última leitura ANTES do período (para ter base de comparação)
-    leitura_anterior_periodo = hidrometro.leituras.filter(
-        data_leitura__date__lt=data_inicio
-    ).order_by('-data_leitura').first()
-
-    # Obter leituras do período
-    leituras_periodo = list(hidrometro.leituras.filter(
-        data_leitura__date__gte=data_inicio,
-        data_leitura__date__lte=data_fim
-    ).order_by('-data_leitura'))
-
-    # Obter todas as leituras para o histórico completo (limitado)
-    leituras_historico = hidrometro.leituras.all().order_by('-data_leitura')[:50]
-
-    # Preparar leituras ordenadas (combinar anterior + período)
-    leituras_para_calculo = list(hidrometro.leituras.filter(
-        data_leitura__date__gte=data_inicio,
-        data_leitura__date__lte=data_fim
-    ).order_by('data_leitura'))
-
-    if leitura_anterior_periodo:
-        leituras_para_calculo = [leitura_anterior_periodo] + leituras_para_calculo
-
-    # Calcular consumo total no período
-    consumo_total_periodo = 0
-
-    for i in range(1, len(leituras_para_calculo)):
-        leitura_atual = leituras_para_calculo[i]
-        leitura_anterior = leituras_para_calculo[i - 1]
-
-        # Só contabilizar se a leitura ATUAL estiver dentro do período filtrado
-        if _data_leitura_local(leitura_atual).date() < data_inicio:
-            continue
-
-        diferenca = float(leitura_atual.leitura) - float(leitura_anterior.leitura)
-        if diferenca > 0:
-            consumo_litros = diferenca * 1000
-            consumo_total_periodo += consumo_litros
-
-    # Preparar dados para gráficos
-    # Gráfico 1: Consumo por Dia
-    consumo_por_dia = defaultdict(float)
-    for i in range(1, len(leituras_para_calculo)):
-        leitura_atual = leituras_para_calculo[i]
-        leitura_anterior = leituras_para_calculo[i - 1]
-
-        # Só contabilizar se a leitura ATUAL estiver dentro do período filtrado
-        if _data_leitura_local(leitura_atual).date() < data_inicio:
-            continue
-
-        diferenca = float(leitura_atual.leitura) - float(leitura_anterior.leitura)
-        if diferenca > 0:
-            consumo_litros = diferenca * 1000
-            dia_str = _data_leitura_local(leitura_atual).strftime('%d/%m')
-            consumo_por_dia[dia_str] += consumo_litros
-
-    consumo_dia_lista = [
-        {'dia': dia, 'consumo_litros': consumo}
-        for dia, consumo in sorted(consumo_por_dia.items())
-    ]
-
-    # Gráfico 2: Consumo por Mês (sempre exibe todos os 12 meses)
-    # Inicializar todos os meses com 0
-    consumo_por_mes = {mes: 0.0 for mes in range(1, 13)}
-    for i in range(1, len(leituras_para_calculo)):
-        leitura_atual = leituras_para_calculo[i]
-        leitura_anterior = leituras_para_calculo[i - 1]
-
-        # Só contabilizar se a leitura ATUAL estiver dentro do período filtrado
-        if _data_leitura_local(leitura_atual).date() < data_inicio:
-            continue
-
-        diferenca = float(leitura_atual.leitura) - float(leitura_anterior.leitura)
-        if diferenca > 0:
-            consumo_litros = diferenca * 1000
-            mes_numero = _data_leitura_local(leitura_atual).month
-            consumo_por_mes[mes_numero] += consumo_litros
-    
-    # Sempre exibir todos os 12 meses em português
-    consumo_mes_lista = []
-    for mes in range(1, 13):
-        mes_nome = MESES_PT_BR[mes]
-        consumo_mes_lista.append({
-            'mes': mes,
-            'mes_nome': mes_nome,
-            'consumo_litros': consumo_por_mes[mes]
-        })
-    
-    # Dados dos gráficos (sem período do dia - removido do template)
-    dados_graficos = {
-        'consumo_dia': consumo_dia_lista,
-        'consumo_mes': consumo_mes_lista,
-        'consumo_total_periodo': consumo_total_periodo,
-        'periodo_label': periodo_label,
-        'periodo_selecionado': periodo,
-    }
-    
-    # Serializar dados para JSON
-    import json
-    dados_graficos_json = json.dumps(dados_graficos, ensure_ascii=False)
-    
-    context = {
-        'hidrometro': hidrometro,
-        'leituras': leituras_historico,
-        'dados_graficos': dados_graficos_json,
-    }
-    
-    return render(request, 'consumo/detalhes_hidrometro.html', context)
-
-
 @admin_required
 def graficos_consumo(request):
     """Página com gráficos de consumo do condomínio com filtro de período."""
@@ -1409,14 +1259,19 @@ def graficos_lote(request, lote_id):
     import json
     dados_graficos_json = json.dumps(dados_graficos, ensure_ascii=False)
     
+    leituras_historico = Leitura.objects.filter(
+        hidrometro__lote=lote,
+        hidrometro__ativo=True
+    ).select_related('hidrometro').order_by('-data_leitura')[:50]
+    
     context = {
         'lote': lote,
         'dados_graficos': dados_graficos_json,
         'hidrometros': hidrometros,
+        'leituras': leituras_historico,  # <-- Enviando os dados para a tabela do template
     }
     
     return render(request, 'consumo/graficos_lote.html', context)
-
 
 @admin_required
 def exportar_graficos_consumo_pdf(request):
