@@ -1,5 +1,4 @@
 from functools import wraps
-
 from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
@@ -33,7 +32,6 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.utils import ImageReader
-
 from .forms import CadastroUsuarioForm, LoginForm
 from .models import Lote, Hidrometro, Leitura
 from .services.relatorios_cache import calcular_data_coleta, pasta_relatorios_coleta
@@ -45,9 +43,7 @@ from .serializers import (
     LeituraCreateSerializer
 )
 
-
 LOGGER = logging.getLogger(__name__)
-
 
 # Mapeamento de meses em português do Brasil
 MESES_PT_BR = {
@@ -55,7 +51,6 @@ MESES_PT_BR = {
     5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
     9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
 }
-
 
 def usuario_eh_administracao(user):
     if not user.is_authenticated:
@@ -66,12 +61,10 @@ def usuario_eh_administracao(user):
     perfil = getattr(user, 'perfil', None)
     return bool(perfil and perfil.tipo_acesso == 'administracao')
 
-
 def _redirecionar_pos_login(user):
     if usuario_eh_administracao(user):
         return redirect('consumo:dashboard')
     return redirect('consumo:registrar_leitura')
-
 
 def admin_required(view_func):
     @wraps(view_func)
@@ -83,12 +76,10 @@ def admin_required(view_func):
 
     return _wrapped_view
 
-
 def formatar_mes_ano_ptbr(data):
     """Retorna string formatada 'Mês/Ano' em português do Brasil"""
     mes_nome = MESES_PT_BR[data.month]
     return f"{mes_nome}/{data.year}"
-
 
 def _obter_caminho_logo_marca_dagua():
     caminhos = [
@@ -99,7 +90,6 @@ def _obter_caminho_logo_marca_dagua():
         if os.path.exists(caminho):
             return caminho
     return None
-
 
 def _desenhar_marca_dagua_logo(canvas, doc):
     caminho_logo = _obter_caminho_logo_marca_dagua()
@@ -1277,8 +1267,6 @@ def graficos_lote(request, lote_id):
 def exportar_graficos_consumo_pdf(request):
     """Exporta os gráficos de consumo do condomínio em PDF"""
     LIMITE_MENSAL_LITROS = 15000
-
-    import os
     os.environ.setdefault('MPLCONFIGDIR', '/tmp/matplotlib')
     import matplotlib
     matplotlib.use('Agg')
@@ -1817,7 +1805,6 @@ def baixar_relatorios_lotes_periodo_zip(request):
 @admin_required
 def exportar_graficos_lote_pdf(request, lote_id):
     """Exporta os gráficos de consumo de um lote específico em PDF"""
-    import os
     os.environ.setdefault('MPLCONFIGDIR', '/tmp/matplotlib')
     import matplotlib
     matplotlib.use('Agg')
@@ -2264,5 +2251,19 @@ def exportar_graficos_lote_pdf_job(request, lote_id):
 
     return exportar_graficos_lote_pdf.__wrapped__(request, lote_id)
 
+@csrf_exempt
+def enviar_emails_job(request):
+    # Proteção de segurança: só o Render com o Token correto pode acionar
+    token = request.headers.get('X-Job-Token')
+    secret = os.environ.get('JOB_SECRET_TOKEN')
+    
+    if token != secret or not secret:
+        return JsonResponse({'erro': 'Não autorizado'}, status=403)
 
-
+    try:
+        # Aqui o sistema vai acionar o seu comando exato de envio!
+        call_command('enviar_email_mensal') 
+        
+        return JsonResponse({'ok': True, 'msg': 'Envio de e-mails concluído com sucesso!'})
+    except Exception as e:
+        return JsonResponse({'erro': str(e)}, status=500)
