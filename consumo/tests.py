@@ -14,6 +14,7 @@ import hmac
 import hashlib
 
 from .models import Lote, Hidrometro, Leitura
+from .services.taxas_consumo import calcular_taxa_excesso
 
 
 class ModelTests(TestCase):
@@ -107,6 +108,12 @@ class ModelTests(TestCase):
             self.skipTest("Consumo retornou 0, possível issue de timezone no método")
         else:
             self.assertEqual(consumo, Decimal('5.500'))
+
+    def test_taxa_excesso_progressiva_por_faixa(self):
+        self.assertEqual(calcular_taxa_excesso(Decimal('15000')), Decimal('0.00'))
+        self.assertEqual(calcular_taxa_excesso(Decimal('20000')), Decimal('67.15'))
+        self.assertEqual(calcular_taxa_excesso(Decimal('25000')), Decimal('367.15'))
+        self.assertEqual(calcular_taxa_excesso(Decimal('30000')), Decimal('867.15'))
 
 
 class AutenticacaoTests(TestCase):

@@ -35,7 +35,9 @@ from reportlab.lib.utils import ImageReader
 from .forms import CadastroUsuarioForm, LoginForm
 from .models import Lote, Hidrometro, Leitura
 from .services.relatorios_cache import calcular_data_coleta, pasta_relatorios_coleta
+from .services.taxas_consumo import calcular_taxa_excesso
 from .services.whatsapp import processar_webhook_desconexao_whatsapp
+from babel.numbers import format_currency
 from .serializers import (
     LoteSerializer, 
     HidrometroSerializer, 
@@ -956,6 +958,7 @@ def graficos_consumo(request):
         'consumo_total_ano': 0.0,
         'lotes_acima_limite_mensal': [],
         'limite_mensal_litros': LIMITE_MENSAL_LITROS,
+        'taxa_excesso_total': 0.0,
         'consumo_por_hidrometro': [],
         'periodo_label': periodo_label,
         'periodo_selecionado': periodo_selecionado,
@@ -970,6 +973,7 @@ def graficos_consumo(request):
     consumo_mensal = {mes: 0.0 for mes in range(1, 13)}
     consumo_total_ano = 0.0
     consumo_por_lote_mes = {}
+    consumo_periodo_por_lote = {}
     consumo_por_hidrometro = []
 
     leituras_stream = (
@@ -1027,6 +1031,8 @@ def graficos_consumo(request):
             chave_lote_mes = (lote_atual_numero, leitura_data.year, leitura_data.month)
             consumo_por_lote_mes.setdefault(chave_lote_mes, 0.0)
             consumo_por_lote_mes[chave_lote_mes] += consumo_litros
+            consumo_periodo_por_lote.setdefault(lote_atual_numero, 0.0)
+            consumo_periodo_por_lote[lote_atual_numero] += consumo_litros
 
         if leitura_data >= data_inicio_grafico_mensal and leitura_data.year == ano_referencia_mensal:
             consumo_mensal[leitura_data.month] += consumo_litros
@@ -1053,19 +1059,34 @@ def graficos_consumo(request):
     dados_graficos['consumo_total_ano'] = round(consumo_total_ano, 2)
 
     excedentes_por_lote = {}
-    for (lote, ano, mes), consumo_litros in consumo_por_lote_mes.items():
-        if consumo_litros <= LIMITE_MENSAL_LITROS:
-            continue
+    taxa_excesso_total = 0.0
 
-        excedente_atual = excedentes_por_lote.get(lote)
-        if (not excedente_atual) or (consumo_litros > excedente_atual['consumo_litros']):
+    # Iteramos sobre o total consolidado do período, não pelas fatias de meses do calendário
+    for lote, consumo_litros in consumo_periodo_por_lote.items():
+        taxa_excesso = calcular_taxa_excesso(consumo_litros)
+        taxa_excesso_total += float(taxa_excesso)
+        
+        if consumo_litros > LIMITE_MENSAL_LITROS:
             excedentes_por_lote[lote] = {
                 'lote': lote,
-                'ano': ano,
-                'mes': mes,
-                'mes_nome': f"{nomes_meses[mes - 1]}/{str(ano)[-2:]}",
+                'mes_nome': periodo_label, # Mostra o período inteiro em vez do mês fragmentado
                 'consumo_litros': round(consumo_litros, 2),
+                'taxa_excesso': float(taxa_excesso),
             }
+
+    # Formata a taxa total do condomínio com o Babel (padrão monetário brasileiro)
+    taxa_total_arredondada = round(taxa_excesso_total, 2)
+    dados_graficos['taxa_excesso_total'] = taxa_total_arredondada
+    dados_graficos['taxa_excesso_total_formatada'] = format_currency(
+        taxa_total_arredondada, 'BRL', locale='pt_BR'
+    )
+
+    # Garante que os excedentes por lote também tenham a string formatada pronta
+    for lote_num, dados_lote in excedentes_por_lote.items():
+        val_taxa = dados_lote['taxa_excesso']
+        dados_lote['taxa_excesso_formatada'] = format_currency(
+            val_taxa, 'BRL', locale='pt_BR'
+        )
 
     dados_graficos['lotes_acima_limite_mensal'] = sorted(
         excedentes_por_lote.values(),
@@ -1178,6 +1199,7 @@ def graficos_lote(request, lote_id):
     consumo_total_periodo = 0.0
     consumo_por_dia = defaultdict(float)
     consumo_por_mes = {mes: 0.0 for mes in range(1, 13)}
+    taxa_excesso_por_mes = {mes: 0.0 for mes in range(1, 13)}
 
     leituras_lote = (
         Leitura.objects.filter(
@@ -1228,10 +1250,12 @@ def graficos_lote(request, lote_id):
     consumo_mes_lista = []
     for mes in range(1, 13):
         mes_nome = MESES_PT_BR[mes]
+        taxa_excesso_por_mes[mes] = float(calcular_taxa_excesso(consumo_por_mes[mes]))
         consumo_mes_lista.append({
             'mes': mes,
             'mes_nome': mes_nome,
-            'consumo_litros': consumo_por_mes[mes]
+            'consumo_litros': consumo_por_mes[mes],
+            'taxa_excesso': taxa_excesso_por_mes[mes],
         })
     
     # Dados dos gráficos (sem período do dia - removido do template)
@@ -1241,6 +1265,7 @@ def graficos_lote(request, lote_id):
         'consumo_por_dia': consumo_dia_lista,
         'consumo_mes': consumo_mes_lista,
         'consumo_total_periodo': consumo_total_periodo,
+        'taxa_excesso_total': round(float(calcular_taxa_excesso(consumo_total_periodo)), 2),
         'periodo_label': periodo_label,
         'periodo_selecionado': periodo,
     }
@@ -1343,7 +1368,7 @@ def exportar_graficos_consumo_pdf(request):
     # Consumo por hidrômetro (individual) no período
     consumo_por_hidrometro = []
     consumo_total_periodo = 0.0
-    consumo_por_lote_mes = {}
+    consumo_periodo_por_lote = {}
     
     for hidrometro in hidrometros:
         # Buscar última leitura ANTES do período (para ter base de comparação)
@@ -1380,9 +1405,8 @@ def exportar_graficos_consumo_pdf(request):
             consumo_hidrometro_litros += consumo_litros
             consumo_total_periodo += consumo_litros
 
-            chave_lote_mes = (hidrometro.lote.numero, leitura_atual.data_leitura.year, leitura_atual.data_leitura.month)
-            consumo_por_lote_mes.setdefault(chave_lote_mes, 0.0)
-            consumo_por_lote_mes[chave_lote_mes] += consumo_litros
+            consumo_periodo_por_lote.setdefault(hidrometro.lote.numero, 0.0)
+            consumo_periodo_por_lote[hidrometro.lote.numero] += consumo_litros
                 
         if consumo_hidrometro_litros > 0:
             consumo_por_hidrometro.append({
@@ -1391,18 +1415,19 @@ def exportar_graficos_consumo_pdf(request):
                 'consumo_litros': round(consumo_hidrometro_litros, 2),
             })
 
-    nomes_meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
     lotes_acima_limite = {}
-    for (lote_numero, ano, mes), consumo_litros in consumo_por_lote_mes.items():
-        if consumo_litros <= LIMITE_MENSAL_LITROS:
-            continue
+    taxa_excesso_total = 0.0
 
-        atual = lotes_acima_limite.get(lote_numero)
-        if (not atual) or (consumo_litros > atual['consumo_litros']):
+    for lote_numero, consumo_litros in consumo_periodo_por_lote.items():
+        taxa_excesso = float(calcular_taxa_excesso(consumo_litros))
+        taxa_excesso_total += taxa_excesso
+
+        if consumo_litros > LIMITE_MENSAL_LITROS:
             lotes_acima_limite[lote_numero] = {
                 'lote': lote_numero,
-                'mes_nome': f"{nomes_meses[mes - 1]}/{str(ano)[-2:]}",
+                'mes_nome': periodo_label, # Usa o nome do período (ex: 16/08 até 18/09)
                 'consumo_litros': round(consumo_litros, 2),
+                'taxa_excesso': taxa_excesso,
             }
 
     lotes_acima_limite_lista = sorted(
@@ -1480,6 +1505,7 @@ def exportar_graficos_consumo_pdf(request):
         ['Indicador', 'Valor'],
         ['Período', periodo_label],
         ['Consumo Total', f'{consumo_total_periodo:,.0f} L'],
+        ['Taxas estimadas', format_currency(taxa_excesso_total, 'BRL', locale='pt_BR')],
         ['Hidrômetros Ativos', str(hidrometros.count())],
         ['Lotes Ativos', str(Lote.objects.filter(ativo=True, tipo='residencial').count())],
     ]
@@ -1505,7 +1531,7 @@ def exportar_graficos_consumo_pdf(request):
     # Lotes com excedente mensal
     elements.append(Paragraph(f"⚠️ Lotes com consumo mensal acima de {LIMITE_MENSAL_LITROS:,.0f} L", heading_style))
 
-    top_data = [['Posição', 'Lote', 'Mês de Referência', 'Maior Consumo Mensal (L)']]
+    top_data = [['Posição', 'Lote', 'Mês de Referência', 'Maior Consumo Mensal (L)', 'Taxa estimada']]
     if lotes_acima_limite_lista:
         for idx, item in enumerate(lotes_acima_limite_lista, 1):
             top_data.append([
@@ -1513,11 +1539,12 @@ def exportar_graficos_consumo_pdf(request):
                 item['lote'],
                 item['mes_nome'],
                 f"{item['consumo_litros']:,.0f}",
+                format_currency(item['taxa_excesso'], 'BRL', locale='pt_BR'),
             ])
     else:
-        top_data.append(['-', '-', '-', 'Nenhum lote excedeu o limite no período'])
+        top_data.append(['-', '-', '-', 'Nenhum lote excedeu o limite no período', '-'])
 
-    top_table = Table(top_data, colWidths=[1*inch, 1.5*inch, 2*inch, 2.5*inch])
+    top_table = Table(top_data, colWidths=[0.8*inch, 1.2*inch, 1.8*inch, 2.3*inch, 1.5*inch])
     top_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e74c3c')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -1994,6 +2021,7 @@ def exportar_graficos_lote_pdf(request, lote_id):
     
     # Resumo Geral
     elements.append(Paragraph("📊 Resumo Geral", heading_style))
+    taxa_excesso_total = float(calcular_taxa_excesso(consumo_total_periodo))
     
     resumo_data = [
         ['Indicador', 'Valor'],
@@ -2001,6 +2029,7 @@ def exportar_graficos_lote_pdf(request, lote_id):
         ['Tipo', lote.get_tipo_display()],
         ['Período', periodo_label],
         ['Consumo Total no Período', f'{consumo_total_periodo:,.0f} L'],
+        ['Taxa Estimada (Período)', format_currency(taxa_excesso_total, 'BRL', locale='pt_BR')],
         ['Hidrometros Ativos', str(len(hidrometros))],
     ]
     
@@ -2025,12 +2054,18 @@ def exportar_graficos_lote_pdf(request, lote_id):
     # Consumo Mensal
     elements.append(Paragraph("📅 Consumo Mensal", heading_style))
     
-    mensal_data = [['Mês', 'Consumo (L)']]
+    mensal_data = [['Mês', 'Consumo (L)', 'Taxa Estimada']]
     for (ano, mes) in meses_periodo:
         mes_nome = f'{nomes_meses[mes - 1]}/{str(ano)[-2:]}'
-        mensal_data.append([mes_nome, f'{consumo_por_mes.get((ano, mes), 0.0):,.0f}'])
+        consumo_mes = consumo_por_mes.get((ano, mes), 0.0)
+        taxa_mes = float(calcular_taxa_excesso(consumo_mes))
+        mensal_data.append([
+            mes_nome, 
+            f'{consumo_mes:,.0f}', 
+            format_currency(taxa_mes, 'BRL', locale='pt_BR')
+        ])
     
-    mensal_table = Table(mensal_data, colWidths=[2*inch, 2*inch])
+    mensal_table = Table(mensal_data, colWidths=[2*inch, 2*inch, 2*inch])
     mensal_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#27ae60')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),

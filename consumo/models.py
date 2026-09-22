@@ -220,6 +220,30 @@ class Leitura(models.Model):
         verbose_name='Atualizado em'
     )
 
+    @property
+    def taxa_excesso(self):
+        """Calcula a taxa de excesso do consumo em m³."""
+        consumo_m3 = self.consumo_desde_ultima_leitura() 
+
+        taxa = 0.0
+
+        if consumo_m3 > 15:
+            # Faixa 1: Acima de 15m³ até 20m³ (Máximo de 5m³ taxados nesta faixa)
+            faixa_1 = min(consumo_m3 - 15, 5)
+            taxa += faixa_1 * 13.43
+
+        if consumo_m3 > 20:
+            # Faixa 2: Acima de 20m³ até 25m³ (Máximo de 5m³ taxados nesta faixa)
+            faixa_2 = min(consumo_m3 - 20, 5)
+            taxa += faixa_2 * 60.00
+
+        if consumo_m3 > 25:
+            # Faixa 3: Tudo que passar de 25m³
+            faixa_3 = consumo_m3 - 25
+            taxa += faixa_3 * 100.00
+
+        return taxa
+
     class Meta:
         verbose_name = 'Leitura'
         verbose_name_plural = 'Leituras'

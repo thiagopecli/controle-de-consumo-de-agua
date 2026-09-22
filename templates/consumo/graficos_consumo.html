@@ -94,6 +94,15 @@
                 <p class="stat-value">{{ hidrometros.count }}</p>
             </div>
         </div>
+
+        <div class="stat-card">
+            <div class="stat-icon">💰</div>
+            <div class="stat-info">
+                <h3>Taxas estimadas</h3>
+                <p class="stat-value">{{ dados_graficos.taxa_excesso_total_formatada }}</p>
+                <p style="font-size: 0.75rem; color: var(--secondary-color); margin-top: 0.25rem;">Lotes acima de 15.000 L/mês</p>
+            </div>
+        </div>
     </div>
 
     <!-- Container dos Gráficos -->
@@ -137,6 +146,30 @@
         <p style="font-size: 0.85rem; color: var(--secondary-color); margin-top: 1rem; text-align: center;">
             Exibe lotes que ultrapassaram o limite mensal no período filtrado (valor mostrado = maior consumo mensal identificado por lote)
         </p>
+        <div class="table-container" style="margin-top: 1rem;">
+            <table class="data-table" style="font-size: 0.95rem;">
+                <thead>
+                    <tr>
+                        <th>Lote</th>
+                        <th>Mês</th>
+                        <th>Consumo</th>
+                        <th>Taxa estimada</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in dados_graficos.lotes_acima_limite_mensal %}
+                    <tr>
+                        <td>{{ item.lote }}</td>
+                        <td>{{ item.mes_nome }}</td>
+                        <td>{{ item.consumo_litros|floatformat:0|formatar_litros }} L</td>
+                        <td>R$ {{ item.taxa_excesso|floatformat:2 }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" style="text-align: center; color: var(--secondary-color);">Nenhum lote acima do limite no período.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <!-- Tabela de Consumo por Hidrômetro -->

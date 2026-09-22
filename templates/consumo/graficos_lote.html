@@ -164,6 +164,14 @@
                 <p style="font-size: 0.75rem; color: var(--secondary-color); margin-top: 0.25rem;" id="periodo-resumo">-</p>
             </div>
         </div>
+        <div class="stat-card">
+            <div class="stat-icon">💰</div>
+            <div class="stat-info">
+                <h3>Taxas estimadas</h3>
+                <p class="stat-value" id="taxa-excesso-display">R$ 0,00</p>
+                <p style="font-size: 0.75rem; color: var(--secondary-color); margin-top: 0.25rem;">Somatório mensal acima de 15.000 L</p>
+            </div>
+        </div>
     </div>
 
     <!-- ==========================================
@@ -271,10 +279,12 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('periodo-resumo').textContent = dadosGraficos.periodo_label;
     
     const consumoTotal = dadosGraficos.consumo_total_periodo;
+    const taxaExcesso = dadosGraficos.taxa_excesso_total || 0;
     const consumoFormatado = consumoTotal >= 1000 
         ? (consumoTotal / 1000).toFixed(1).replace('.', ',') + ' mil' 
         : Math.round(consumoTotal).toLocaleString('pt-BR');
     document.getElementById('consumo-total-display').textContent = consumoFormatado + ' L';
+    document.getElementById('taxa-excesso-display').textContent = taxaExcesso.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
     const descricaoMensal = dadosGraficos.periodo_selecionado === 'personalizado'
         ? 'Visualização mensal do consumo no ano (inclui meses anteriores para comparação)'
         : 'Visualização mensal do consumo ao longo do período';
