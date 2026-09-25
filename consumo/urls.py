@@ -27,7 +27,6 @@ urlpatterns = [
     path('', views.inicio, name='inicio'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('hidrometros/', views.listar_hidrometros, name='listar_hidrometros'),
-    path('hidrometros/<int:hidrometro_id>/', views.detalhes_hidrometro, name='detalhes_hidrometro'),
     path('lotes/<int:lote_id>/graficos/', views.graficos_lote, name='graficos_lote'),
     path('leituras/', views.listar_leituras, name='listar_leituras'),
     path('leituras/<int:leitura_id>/foto/', views.visualizar_foto_leitura, name='visualizar_foto_leitura'),
@@ -35,6 +34,7 @@ urlpatterns = [
     path('registrar-leitura/', views.registrar_leitura, name='registrar_leitura'),
     path('graficos/', views.graficos_consumo, name='graficos_consumo'),
     path('jobs/pregerar-relatorios/', views.pregerar_relatorios_job, name='pregerar_relatorios_job'),
+    path('jobs/enviar-emails/', views.enviar_emails_job, name='enviar_emails_job'),
     path('jobs/lotes/<int:lote_id>/graficos/exportar/pdf/', views.exportar_graficos_lote_pdf_job, name='exportar_graficos_lote_pdf_job'),
     
     # Exportação de relatórios
