@@ -1,49 +1,57 @@
+# 1. Biblioteca Padrão do Python
+import glob
+import hmac
+import io
+import json
+import logging
+import mimetypes
+import os
+import shutil
+import zipfile
+from datetime import datetime, timedelta
 from functools import wraps
+from pathlib import Path
+
+# 2. Bibliotecas de Terceiros (Django, DRF, ReportLab, Babel)
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render, get_object_or_404, redirect
-from django.utils import timezone
-from django.db.models import Sum, Avg, Max, Min, Count, Q, Case, When, Value, IntegerField
-from django.http import HttpResponse, JsonResponse, FileResponse, Http404
-from django.conf import settings
 from django.core.cache import cache
 from django.core.management import call_command
+from django.db.models import Avg, Case, Count, IntegerField, Max, Min, Q, Sum, Value, When
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework import viewsets, filters, status
+
+from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from datetime import timedelta, datetime
-import json
-import io
-import os
-import hmac
-import logging
-import shutil
-import zipfile
-import glob
-import mimetypes
-from pathlib import Path
+
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
+from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+from babel.numbers import format_currency
+
+# 3. Importações Locais da Aplicação
 from .forms import CadastroUsuarioForm, LoginForm
-from .models import Lote, Hidrometro, Leitura
+from .models import Hidrometro, Leitura, Lote
+from .serializers import (
+    HidrometroSerializer,
+    LeituraCreateSerializer,
+    LeituraSerializer,
+    LoteSerializer,
+)
 from .services.relatorios_cache import calcular_data_coleta, pasta_relatorios_coleta
 from .services.taxas_consumo import calcular_taxa_excesso
 from .services.whatsapp import processar_webhook_desconexao_whatsapp
-from babel.numbers import format_currency
-from .serializers import (
-    LoteSerializer, 
-    HidrometroSerializer, 
-    LeituraSerializer,
-    LeituraCreateSerializer
-)
 
 LOGGER = logging.getLogger(__name__)
 
