@@ -72,8 +72,8 @@ services:
     name: controle-agua-pregerar-relatorios
     env: python
     plan: free
-    # Render usa UTC: 00:00 UTC = 21:00 do dia anterior no horario de Brasilia
-    schedule: "0 0 * * *"
+    # Render usa UTC: 03:00 UTC = 00:00 no horário de Brasília (Dia 18)
+    schedule: "0 3 18 * *"
     buildCommand: "pip install -r requirements.txt"
     startCommand: "python -c \"import os,requests; token=os.environ['JOB_SECRET_TOKEN']; env_base=os.environ.get('APP_BASE_URL','').strip().rstrip('/'); default_base='https://controle-agua.onrender.com'; base=env_base or default_base; url=f'{base}/jobs/pregerar-relatorios/?sobrescrever=1&intervalo_segundos=5&tentativas=3&permitir_lotes_incompletos=1'; resp=requests.post(url, headers={'X-Job-Token': token}, timeout=14400); print('URL',url); print(resp.status_code); print(resp.text); alt_url=f'{default_base}/jobs/pregerar-relatorios/?sobrescrever=1&intervalo_segundos=5&tentativas=3&permitir_lotes_incompletos=1'; alt=requests.post(alt_url, headers={'X-Job-Token': token}, timeout=14400) if (resp.status_code==404 and env_base and env_base!=default_base) else None; alt and print('URL',alt_url); alt and print(alt.status_code); alt and print(alt.text); (alt or resp).raise_for_status()\""
     envVars:
@@ -107,44 +107,10 @@ services:
         sync: false
 
   - type: cron
-    name: controle-agua-precheck-email-mensal
-    env: python
-    plan: free
-    # Render usa UTC: 11:00 UTC = 08:00 no horário de Brasília
-    schedule: "0 11 19 * *"
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python manage.py precheck_envio_email_mensal"
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.12.2
-      - key: SECRET_KEY
-        sync: false
-      - key: DEBUG
-        value: "False"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: controle-agua-db
-          property: connectionString
-      - key: EMAIL_HOST
-        sync: false
-      - key: EMAIL_PORT
-        value: "587"
-      - key: EMAIL_HOST_USER
-        sync: false
-      - key: EMAIL_HOST_PASSWORD
-        sync: false
-      - key: EMAIL_USE_TLS
-        value: "True"
-      - key: EMAIL_USE_SSL
-        value: "False"
-      - key: DEFAULT_FROM_EMAIL
-        sync: false
-
-  - type: cron
     name: controle-agua-email-mensal
     env: python
     plan: free
-    # Render usa UTC: 11:00 UTC = 08:00 no horário de Brasília
+    # Render usa UTC: 11:00 UTC = 08:00 no horário de Brasília (Dia 20)
     schedule: "0 11 20 * *"
     buildCommand: "pip install -r requirements.txt"
     startCommand: "python manage.py enviar_email_mensal"
@@ -173,23 +139,3 @@ services:
         value: "False"
       - key: DEFAULT_FROM_EMAIL
         sync: false
-
-  - type: cron
-    name: controle-agua-auditoria-whatsapp-lotes
-    env: python
-    plan: free
-    # Render usa UTC: 11:00 UTC = 08:00 no horario de Brasilia
-    schedule: "0 11 18 * *"
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python manage.py auditar_whatsapp_lotes"
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.12.2
-      - key: SECRET_KEY
-        sync: false
-      - key: DEBUG
-        value: "False"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: controle-agua-db
-          property: connectionString
