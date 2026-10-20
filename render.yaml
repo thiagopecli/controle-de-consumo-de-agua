@@ -113,7 +113,7 @@ services:
     # Render usa UTC: 11:00 UTC = 08:00 no horário de Brasília (Dia 20)
     schedule: "0 11 20 * *"
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "python manage.py enviar_email_mensal"
+    startCommand: "python -c \"import os,requests; base=os.environ.get('APP_BASE_URL', 'https://controle-agua.onrender.com').rstrip('/'); token=os.environ['JOB_SECRET_TOKEN']; url=f'{base}/jobs/enviar-emails/'; resp=requests.post(url, headers={'X-Job-Token': token}, timeout=1800); print(resp.status_code); print(resp.text); resp.raise_for_status()\""
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.2
@@ -125,17 +125,7 @@ services:
         fromDatabase:
           name: controle-agua-db
           property: connectionString
-      - key: EMAIL_HOST
+      - key: APP_BASE_URL
         sync: false
-      - key: EMAIL_PORT
-        value: "587"
-      - key: EMAIL_HOST_USER
-        sync: false
-      - key: EMAIL_HOST_PASSWORD
-        sync: false
-      - key: EMAIL_USE_TLS
-        value: "True"
-      - key: EMAIL_USE_SSL
-        value: "False"
-      - key: DEFAULT_FROM_EMAIL
+      - key: JOB_SECRET_TOKEN
         sync: false
