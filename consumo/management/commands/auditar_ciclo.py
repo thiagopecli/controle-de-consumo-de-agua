@@ -1,8 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.conf import settings
 from pathlib import Path
-# Ajuste 'consumo' para o nome exato do seu app onde estão os Models de Lote e Leitura
-from consumo.models import Lote, Leitura  # Exemplo de imports, adapte se necessário
+from consumo.models import Lote, Leitura, Hidrometro
 
 class Command(BaseCommand):
     help = 'Audita o ciclo de consumo atual, verificando e-mails, PDFs, consumo zero e hidrômetros invertidos.'
@@ -10,8 +9,6 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stdout.write(self.style.NOTICE("🔍 Iniciando auditoria completa do ciclo de água..."))
 
-        # Defina aqui a pasta do ciclo atual (ex: 2026-10-15)
-        # Pode ajustar dinamicamente se necessário
         periodo_str = "2026-10-15"
         pasta_relatorios = Path(settings.MEDIA_ROOT) / 'relatorios_mensais' / periodo_str
 
@@ -28,8 +25,9 @@ class Command(BaseCommand):
 
         for lote in lotes:
             total_lotes += 1
-            lote_id = getattr(lote, 'numero', lote.id)
-            email = getattr(lote, 'email', None) # Adapte para o campo de email do seu model
+            # Tenta pegar o número ou identificação do lote de forma segura
+            lote_id = getattr(lote, 'numero', getattr(lote, 'identificacao', lote.id))
+            email = getattr(lote, 'email', None)
             
             # 1. Verificar se tem email
             tem_email = bool(email and email.strip())
@@ -38,34 +36,34 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING(f"⚠️ Lote {lote_id}: Sem e-mail cadastrado."))
 
             # 2. Verificar se o PDF existe na pasta
-            pdf_path = pasta_relatorios / f"relatorio_lote_{lote_id}_20260916_20261015.pdf" # Ajuste o sufixo da data se precisar
+            pdf_path = pasta_relatorios / f"relatorio_lote_{lote_id}_20260916_20261015.pdf"
             pdf_existe = pdf_path.exists()
             if not pdf_existe:
                 sem_pdf += 1
 
-            # 3. Buscar leituras recentes para verificar consumo e inversão
-            # Ajuste a consulta conforme os seus models de Leitura / Histórico
-            leituras = Leitura.objects.filter(lote=lote).order_by('-data_leitura')[:2]
-            
+            # 3. Buscar leituras associadas aos hidrômetros deste lote
+            hidrometros = Hidrometro.objects.filter(lote=lote)
             consumo_zero = False
             invertido = False
+            tem_leitura = False
 
-            if leituras.count() >= 2:
-                atual = leituras[0].valor
-                anterior = leituras[1].valor
-                
-                # Alerta de hidrômetro invertido (leitura atual menor que a anterior)
-                if atual < anterior:
-                    invertido = True
-                    hidrometros_invertidos += 1
-                    self.stdout.write(self.style.ERROR(f"🚨 ALERTA - Lote {lote_id}: Possível hidrômetro invertido! (Atual: {atual} < Anterior: {anterior})"))
-                
-                # Alerta de consumo zero
-                consumo = atual - anterior
-                if consumo == 0 and not invertido:
-                    sem_consumo += 1
-                    self.stdout.write(self.style.WARNING(f"🟡 Lote {lote_id}: Sem consumo registrado no período."))
-            
+            for hidrometro in hidrometros:
+                leituras = Leitura.objects.filter(hidrometro=hidrometro).order_by('-data_leitura')[:2]
+                if leituras.count() >= 2:
+                    tem_leitura = True
+                    atual = leituras[0].leitura # Ajuste para o campo numérico da leitura se necessário (ex: .valor ou .leitura)
+                    anterior = leituras[1].leitura
+                    
+                    if atual < anterior:
+                        invertido = True
+                        hidrometros_invertidos += 1
+                        self.stdout.write(self.style.ERROR(f"🚨 ALERTA - Lote {lote_id} (Hidrômetro {hidrometro.id}): Possível hidrômetro invertido! (Atual: {atual} < Anterior: {anterior})"))
+                    
+                    consumo = atual - anterior
+                    if consumo == 0 and not invertido:
+                        sem_consumo += 1
+                        self.stdout.write(self.style.WARNING(f"🟡 Lote {lote_id}: Sem consumo registrado no período."))
+
             if tem_email and pdf_existe and not invertido and not consumo_zero:
                 tudo_certo += 1
 
