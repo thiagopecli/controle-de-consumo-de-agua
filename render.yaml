@@ -129,3 +129,41 @@ services:
         sync: false
       - key: JOB_SECRET_TOKEN
         sync: false
+  - type: cron
+    name: controle-agua-relatorio-admin
+    env: python
+    plan: free
+    # 10:00 UTC = 07:00 no horário de Brasília (Dia 16 do mês)
+    schedule: "0 10 16 * *"
+    buildCommand: "pip install -r requirements.txt"
+    # Como este PDF não usa fotos de hidrômetros, podemos rodar localmente com segurança!
+    startCommand: "python manage.py enviar_relatorio_admin"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.2
+      - key: SECRET_KEY
+        sync: false
+      - key: DEBUG
+        value: "False"
+      - key: MPLCONFIGDIR
+        value: /tmp/matplotlib
+      - key: DATABASE_URL
+        fromDatabase:
+          name: controle-agua-db
+          property: connectionString
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: EMAIL_USE_SSL
+        value: "False"
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
