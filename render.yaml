@@ -8,12 +8,12 @@ services:
     name: controle-agua
     env: python
     plan: standard  # ⚠️ Alterado para o seu plano real
-    disks:
-      - name: media
-        mountPath: /var/data
-        sizeGB: 1
+    disk:
+      name: media
+      mountPath: /var/data
+      sizeGB: 1
     buildCommand: "pip install -r requirements.txt; python manage.py collectstatic --noinput; python manage.py migrate; python manage.py create_superuser_if_missing"
-    startCommand: "gunicorn hidrometro_project.wsgi:application --workers 1 --threads 4 --worker-class gthread --max-requests 200 --max-requests-jitter 25 --timeout 120" # ⚠️ Ajustado para o teto real do Render
+    startCommand: "gunicorn hidrometro_project.wsgi:application --workers 1 --threads 4 --worker-class gthread --max-requests 200 --max-requests-jitter 25 --timeout 120"
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.2
@@ -129,6 +129,7 @@ services:
         sync: false
       - key: JOB_SECRET_TOKEN
         sync: false
+
   - type: cron
     name: controle-agua-relatorio-admin
     env: python
@@ -136,7 +137,6 @@ services:
     # 10:00 UTC = 07:00 no horário de Brasília (Dia 16 do mês)
     schedule: "0 10 16 * *"
     buildCommand: "pip install -r requirements.txt"
-    # Como este PDF não usa fotos de hidrômetros, podemos rodar localmente com segurança!
     startCommand: "python manage.py enviar_relatorio_admin"
     envVars:
       - key: PYTHON_VERSION
