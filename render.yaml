@@ -7,7 +7,7 @@ services:
   - type: web
     name: controle-agua
     env: python
-    plan: standard  # ⚠️ Alterado para o seu plano real
+    plan: standard
     disk:
       name: media
       mountPath: /var/data
@@ -71,7 +71,7 @@ services:
   - type: cron
     name: controle-agua-pregerar-relatorios
     env: python
-    plan: free
+    plan: starter
     # Render usa UTC: 03:00 UTC = 00:00 no horário de Brasília (Dia 18)
     schedule: "0 3 18 * *"
     buildCommand: "pip install -r requirements.txt"
@@ -109,7 +109,7 @@ services:
   - type: cron
     name: controle-agua-email-mensal
     env: python
-    plan: free
+    plan: starter
     # Render usa UTC: 11:00 UTC = 08:00 no horário de Brasília (Dia 20)
     schedule: "0 11 20 * *"
     buildCommand: "pip install -r requirements.txt"
@@ -133,7 +133,7 @@ services:
   - type: cron
     name: controle-agua-relatorio-admin
     env: python
-    plan: free
+    plan: starter
     # 10:00 UTC = 07:00 no horário de Brasília (Dia 16 do mês)
     schedule: "0 10 16 * *"
     buildCommand: "pip install -r requirements.txt"
